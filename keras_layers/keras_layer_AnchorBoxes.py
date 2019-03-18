@@ -1,4 +1,4 @@
-'''
+"""
 A custom Keras layer to generate anchor boxes.
 
 Copyright (C) 2018 Pierluigi Ferrari
@@ -14,7 +14,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-'''
+"""
 
 from __future__ import division
 import numpy as np
@@ -24,8 +24,9 @@ from keras.engine.topology import Layer
 
 from bounding_box_utils.bounding_box_utils import convert_coordinates
 
+
 class AnchorBoxes(Layer):
-    '''
+    """
     A Keras layer to create an output tensor containing anchor box coordinates
     and variances based on the input tensor and the passed arguments.
 
@@ -37,10 +38,10 @@ class AnchorBoxes(Layer):
     The logic implemented by this layer is identical to the logic in the module
     `ssd_box_encode_decode_utils.py`.
 
-    The purpose of having this layer in the network is to make the model self-sufficient
-    at inference time. Since the model is predicting offsets to the anchor boxes
-    (rather than predicting absolute box coordinates directly), one needs to know the anchor
-    box coordinates in order to construct the final prediction boxes from the predicted offsets.
+    The purpose of having this layer in the network is to make the model self-sufficient at inference time.
+    Since the model is predicting offsets to the anchor boxes (rather than predicting absolute box coordinates directly)
+    , one needs to know the anchor box coordinates in order to construct the final prediction boxes from the predicted
+    offsets.
     If the model's output tensor did not contain the anchor box coordinates, the necessary
     information to convert the predicted offsets back to absolute coordinates would be missing
     in the model output. The reason why it is necessary to predict offsets to the anchor boxes
@@ -53,7 +54,7 @@ class AnchorBoxes(Layer):
     Output shape:
         5D tensor of shape `(batch, height, width, n_boxes, 8)`. The last axis contains
         the four anchor box coordinates and the four variance values for each box.
-    '''
+    """
 
     def __init__(self,
                  img_height,
@@ -69,8 +70,9 @@ class AnchorBoxes(Layer):
                  coords='centroids',
                  normalize_coords=False,
                  **kwargs):
-        '''
-        All arguments need to be set to the same values as in the box encoding process, otherwise the behavior is undefined.
+        """
+        All arguments need to be set to the same values as in the box encoding process,
+        otherwise the behavior is undefined.
         Some of these arguments are explained in more detail in the documentation of the `SSDBoxEncoder` class.
 
         Arguments:
@@ -94,15 +96,19 @@ class AnchorBoxes(Layer):
                 'corners' for the format `(xmin, ymin, xmax,  ymax)`, or 'minmax' for the format `(xmin, xmax, ymin, ymax)`.
             normalize_coords (bool, optional): Set to `True` if the model uses relative instead of absolute coordinates,
                 i.e. if the model predicts box coordinates within [0,1] instead of absolute coordinates.
-        '''
+        """
         if K.backend() != 'tensorflow':
-            raise TypeError("This layer only supports TensorFlow at the moment, but you are using the {} backend.".format(K.backend()))
+            raise TypeError(
+                "This layer only supports TensorFlow at the moment, "
+                "but you are using the {} backend.".format(K.backend()))
 
         if (this_scale < 0) or (next_scale < 0) or (this_scale > 1):
-            raise ValueError("`this_scale` must be in [0, 1] and `next_scale` must be >0, but `this_scale` == {}, `next_scale` == {}".format(this_scale, next_scale))
+            raise ValueError(
+                "`this_scale` must be in [0, 1] and `next_scale` must be >0, "
+                "but `this_scale` == {}, `next_scale` == {}".format(this_scale, next_scale))
 
         if len(variances) != 4:
-            raise ValueError("4 variance values must be pased, but {} values were received.".format(len(variances)))
+            raise ValueError("4 variance values must be passed, but {} values were received.".format(len(variances)))
         variances = np.array(variances)
         if np.any(variances <= 0):
             raise ValueError("All variances must be >0, but the variances given are {}".format(variances))
@@ -131,21 +137,22 @@ class AnchorBoxes(Layer):
         super(AnchorBoxes, self).build(input_shape)
 
     def call(self, x, mask=None):
-        '''
+        """
         Return an anchor box tensor based on the shape of the input tensor.
-
         The logic implemented here is identical to the logic in the module `ssd_box_encode_decode_utils.py`.
-
-        Note that this tensor does not participate in any graph computations at runtime. It is being created
-        as a constant once during graph creation and is just being output along with the rest of the model output
-        during runtime. Because of this, all logic is implemented as Numpy array operations and it is sufficient
-        to convert the resulting Numpy array into a Keras tensor at the very end before outputting it.
+        Note that this tensor does not participate in any graph computations at runtime.
+        It is being created as a constant once during graph creation and
+        is just being output along with the rest of the model output during runtime.
+        Because of this, all logic is implemented as Numpy array operations and
+        it is sufficient to convert the resulting Numpy array into a Keras tensor at the very end before outputting it.
 
         Arguments:
-            x (tensor): 4D tensor of shape `(batch, channels, height, width)` if `dim_ordering = 'th'`
-                or `(batch, height, width, channels)` if `dim_ordering = 'tf'`. The input for this
-                layer must be the output of the localization predictor layer.
-        '''
+            x (tensor): 4D tensor of shape
+                `(batch, channels, height, width)` if `dim_ordering = 'th'`
+                or `(batch, height, width, channels)` if `dim_ordering = 'tf'`.
+                The input for this layer must be the output of the localization predictor layer.
+            mask: 是啥?
+        """
 
         # Compute box width and height for each aspect ratio
         # The shorter side of the image will be used to compute `w` and `h` using `scale` and `aspect_ratios`.
@@ -153,30 +160,38 @@ class AnchorBoxes(Layer):
         # Compute the box widths and and heights for all aspect ratios
         wh_list = []
         for ar in self.aspect_ratios:
-            if (ar == 1):
+            if ar == 1:
                 # Compute the regular anchor box for aspect ratio 1.
                 box_height = box_width = self.this_scale * size
                 wh_list.append((box_width, box_height))
                 if self.two_boxes_for_ar1:
                     # Compute one slightly larger version using the geometric mean of this scale value and the next.
+                    # NOTE 几何平均数, 就是当 aspect_ratios 为 1 时取两个 boxes
                     box_height = box_width = np.sqrt(self.this_scale * self.next_scale) * size
                     wh_list.append((box_width, box_height))
             else:
                 box_height = self.this_scale * size / np.sqrt(ar)
                 box_width = self.this_scale * size * np.sqrt(ar)
                 wh_list.append((box_width, box_height))
+        # shape 为 (n_boxes, 2)
         wh_list = np.array(wh_list)
 
         # We need the shape of the input tensor
         if K.image_dim_ordering() == 'tf':
             batch_size, feature_map_height, feature_map_width, feature_map_channels = x._keras_shape
-        else: # Not yet relevant since TensorFlow is the only supported backend right now, but it can't harm to have this in here for the future
+        else:
+            # Not yet relevant since TensorFlow is the only supported backend right now,
+            # but it can't harm to have this in here for the future
             batch_size, feature_map_channels, feature_map_height, feature_map_width = x._keras_shape
 
         # Compute the grid of box center points. They are identical for all aspect ratios.
 
-        # Compute the step sizes, i.e. how far apart the anchor box center points will be vertically and horizontally.
-        if (self.this_steps is None):
+        # Compute the step sizes, i.e. :
+        # how far apart the anchor box center points will be vertically and horizontally.
+        if self.this_steps is None:
+            # 假设 box4, img_height,img_width=512, 那么 feature_map_height,feature_map_width=512 / 2 ^ 4 = 32
+            # 那么 step_height,step_width=512/32=16
+            # 意思是 feature_map 是 32*32 的方格, 一个方格表示原图的 16*16 个像素, 每一个 step 移动一个方格
             step_height = self.img_height / feature_map_height
             step_width = self.img_width / feature_map_width
         else:
@@ -186,8 +201,9 @@ class AnchorBoxes(Layer):
             elif isinstance(self.this_steps, (int, float)):
                 step_height = self.this_steps
                 step_width = self.this_steps
-        # Compute the offsets, i.e. at what pixel values the first anchor box center point will be from the top and from the left of the image.
-        if (self.this_offsets is None):
+        # Compute the offsets, i.e. :
+        # at what pixel values the first anchor box center point will be from the top and from the left of the image.
+        if self.this_offsets is None:
             offset_height = 0.5
             offset_width = 0.5
         else:
@@ -198,56 +214,77 @@ class AnchorBoxes(Layer):
                 offset_height = self.this_offsets
                 offset_width = self.this_offsets
         # Now that we have the offsets and step sizes, compute the grid of anchor box center points.
-        cy = np.linspace(offset_height * step_height, (offset_height + feature_map_height - 1) * step_height, feature_map_height)
-        cx = np.linspace(offset_width * step_width, (offset_width + feature_map_width - 1) * step_width, feature_map_width)
+        # np.linspace 参见 https://docs.scipy.org/doc/numpy/reference/generated/numpy.linspace.html
+        # 第一个参数 start 表示区间开始, 第二个参数 stop 表示区间结尾, 第三个参数 num, 表示个数，默认包含 stop
+        # 如 box4, np.linspace(0.5 * 16, 31.5 * 16, 32), cy=np.array([8, 24, 40, 56, ... ,472, 488, 504])
+        cy = np.linspace(offset_height * step_height, (offset_height + feature_map_height - 1) * step_height,
+                         feature_map_height)
+        cx = np.linspace(offset_width * step_width, (offset_width + feature_map_width - 1) * step_width,
+                         feature_map_width)
+        # 如 box4, cx_grid=np.array([[8,24,...504],[8,24,...504],...,[8,24,...504]]), shape 为 (32, 32)
+        # cy_grid=np.array([[8,8,...8],[24,24,...24],...,[504,504,...504]]), shape 为 (32, 32)
         cx_grid, cy_grid = np.meshgrid(cx, cy)
-        cx_grid = np.expand_dims(cx_grid, -1) # This is necessary for np.tile() to do what we want further down
-        cy_grid = np.expand_dims(cy_grid, -1) # This is necessary for np.tile() to do what we want further down
+        # This is necessary for np.tile() to do what we want further down
+        # 如 box4, shape 变为 (32, 32, 1)
+        cx_grid = np.expand_dims(cx_grid, -1)
+        cy_grid = np.expand_dims(cy_grid, -1)
 
         # Create a 4D tensor template of shape `(feature_map_height, feature_map_width, n_boxes, 4)`
         # where the last dimension will contain `(cx, cy, w, h)`
         boxes_tensor = np.zeros((feature_map_height, feature_map_width, self.n_boxes, 4))
+        # np.tile() 返回的数组的 shape 为 (feature_map_height, feature_map_width, n_boxes)
+        # Set cx
+        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, self.n_boxes))
+        # Set cy
+        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, self.n_boxes))
+        # Set w
+        boxes_tensor[:, :, :, 2] = wh_list[:, 0]
+        # Set h
+        boxes_tensor[:, :, :, 3] = wh_list[:, 1]
 
-        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, self.n_boxes)) # Set cx
-        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, self.n_boxes)) # Set cy
-        boxes_tensor[:, :, :, 2] = wh_list[:, 0] # Set w
-        boxes_tensor[:, :, :, 3] = wh_list[:, 1] # Set h
-
-        # Convert `(cx, cy, w, h)` to `(xmin, xmax, ymin, ymax)`
+        # Convert `(cx, cy, w, h)` to `(xmin, ymin, xmax, ymax)`
+        # 转换是为了做 clip
         boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='centroids2corners')
 
         # If `clip_boxes` is enabled, clip the coordinates to lie within the image boundaries
         if self.clip_boxes:
-            x_coords = boxes_tensor[:,:,:,[0, 2]]
+            x_coords = boxes_tensor[:, :, :, [0, 2]]
             x_coords[x_coords >= self.img_width] = self.img_width - 1
             x_coords[x_coords < 0] = 0
-            boxes_tensor[:,:,:,[0, 2]] = x_coords
-            y_coords = boxes_tensor[:,:,:,[1, 3]]
+            # 记得 tf 是不能做这样的操作的
+            boxes_tensor[:, :, :, [0, 2]] = x_coords
+            y_coords = boxes_tensor[:, :, :, [1, 3]]
             y_coords[y_coords >= self.img_height] = self.img_height - 1
             y_coords[y_coords < 0] = 0
-            boxes_tensor[:,:,:,[1, 3]] = y_coords
+            boxes_tensor[:, :, :, [1, 3]] = y_coords
 
         # If `normalize_coords` is enabled, normalize the coordinates to be within [0,1]
         if self.normalize_coords:
             boxes_tensor[:, :, :, [0, 2]] /= self.img_width
             boxes_tensor[:, :, :, [1, 3]] /= self.img_height
 
-        # TODO: Implement box limiting directly for `(cx, cy, w, h)` so that we don't have to unnecessarily convert back and forth.
+        # TODO: Implement box limiting directly for `(cx, cy, w, h)`
+        #  so that we don't have to unnecessarily convert back and forth.
         if self.coords == 'centroids':
             # Convert `(xmin, ymin, xmax, ymax)` back to `(cx, cy, w, h)`.
-            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2centroids', border_pixels='half')
+            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2centroids',
+                                               border_pixels='half')
         elif self.coords == 'minmax':
             # Convert `(xmin, ymin, xmax, ymax)` to `(xmin, xmax, ymin, ymax).
-            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2minmax', border_pixels='half')
+            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2minmax',
+                                               border_pixels='half')
 
-        # Create a tensor to contain the variances and append it to `boxes_tensor`. This tensor has the same shape
-        # as `boxes_tensor` and simply contains the same 4 variance values for every position in the last axis.
-        variances_tensor = np.zeros_like(boxes_tensor) # Has shape `(feature_map_height, feature_map_width, n_boxes, 4)`
-        variances_tensor += self.variances # Long live broadcasting
+        # Create a tensor to contain the variances and append it to `boxes_tensor`.
+        # This tensor has the same shape as `boxes_tensor`
+        # and simply contains the same 4 variance values for every position in the last axis.
+        # Has shape `(feature_map_height, feature_map_width, n_boxes, 4)`
+        variances_tensor = np.zeros_like(boxes_tensor)
+        # Long live broadcasting
+        variances_tensor += self.variances
         # Now `boxes_tensor` becomes a tensor of shape `(feature_map_height, feature_map_width, n_boxes, 8)`
         boxes_tensor = np.concatenate((boxes_tensor, variances_tensor), axis=-1)
-
         # Now prepend one dimension to `boxes_tensor` to account for the batch size and tile it along
+        # 沿着 batch_size 那一维进行 tile
         # The result will be a 5D tensor of shape `(batch_size, feature_map_height, feature_map_width, n_boxes, 8)`
         boxes_tensor = np.expand_dims(boxes_tensor, axis=0)
         boxes_tensor = K.tile(K.constant(boxes_tensor, dtype='float32'), (K.shape(x)[0], 1, 1, 1, 1))
@@ -257,11 +294,14 @@ class AnchorBoxes(Layer):
     def compute_output_shape(self, input_shape):
         if K.image_dim_ordering() == 'tf':
             batch_size, feature_map_height, feature_map_width, feature_map_channels = input_shape
-        else: # Not yet relevant since TensorFlow is the only supported backend right now, but it can't harm to have this in here for the future
+        else:
+            # Not yet relevant since TensorFlow is the only supported backend right now,
+            # but it can't harm to have this in here for the future
             batch_size, feature_map_channels, feature_map_height, feature_map_width = input_shape
-        return (batch_size, feature_map_height, feature_map_width, self.n_boxes, 8)
+        return batch_size, feature_map_height, feature_map_width, self.n_boxes, 8
 
     def get_config(self):
+        # UNCLEAR: get_config 有什么用?
         config = {
             'img_height': self.img_height,
             'img_width': self.img_width,
