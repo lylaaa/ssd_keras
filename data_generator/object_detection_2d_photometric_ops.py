@@ -227,7 +227,7 @@ class RandomSaturation:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p <= self.prob:
+        if p < self.prob:
             self.change_saturation.factor = np.random.uniform(self.lower, self.upper)
             return self.change_saturation(image, labels)
         elif labels is None:
@@ -248,7 +248,10 @@ class Brightness:
     def __init__(self, delta):
         """
         Arguments:
-            delta (int): An integer, the amount to add to or subtract from the intensity of every pixel.
+            delta (float): An integer, the float to add to or subtract from the intensity of every pixel.
+
+        Returns:
+            image (dtype float64), label(maybe)
         """
         self.delta = delta
 
@@ -289,7 +292,7 @@ class RandomBrightness:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p <= self.prob:
+        if p < self.prob:
             self.change_brightness.delta = np.random.uniform(self.lower, self.upper)
             return self.change_brightness(image, labels)
         elif labels is None:
@@ -352,7 +355,7 @@ class RandomContrast:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p <= self.prob:
+        if p < self.prob:
             self.change_contrast.factor = np.random.uniform(self.lower, self.upper)
             return self.change_contrast(image, labels)
         elif labels is None:

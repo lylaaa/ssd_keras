@@ -47,6 +47,7 @@ def match_bipartite_greedy(weight_matrix):
     Returns:
         A 1D Numpy array of length `weight_matrix.shape[0]` that represents
         the matched index along the second axis of `weight_matrix` for each index along the first axis.
+        就是为每个 gt_box 找一个匹配的 anchor_box, 返回 array 的 shape 为 (m, )
     """
     # We'll modify this array.
     weight_matrix = np.copy(weight_matrix)
@@ -73,8 +74,8 @@ def match_bipartite_greedy(weight_matrix):
         # Set the match.
         matches[ground_truth_index] = anchor_index
 
-        # Set the row of the matched ground truth box and the column of the matched anchor box to all zeros.
-        # This ensures that those boxes will not be matched again, because they will never be the best matches
+        # Set the row of the matched ground truth box to all zeros, because it has found the matched anchor_box
+        # Set the column of the matched anchor box to all zeros, because they will never be the best matches
         # for any other boxes.
         # 最后设置该 gt_box 和其他所有的 anchor_box 的 iou 为 0, 设置该 anchor_box 和其他所有的 gt_box 的 iou 为 0.
         weight_matrix[ground_truth_index] = 0
@@ -87,16 +88,17 @@ def match_multi(weight_matrix, threshold):
     """
     Matches all elements along the second axis of `weight_matrix` to their best matches along the first axis subject to
     the constraint that the weight of a match must be greater than or equal to `threshold` in order to produce a match.
-    一列一列地看, 只要大于等于 threshold 就是 match 的
+    一列一列地看, 找出某一列中的最大值, 如果最大值大于 threshold, 那么认为是 match 的
 
-    If the weight matrix contains elements that should be ignored, the row or column
-    representing the respective element should be set to a value below `threshold`.
+    If the weight matrix contains elements that should be ignored, the row or column representing the respective element
+    should be set to a value below `threshold`. 在调用前已经把 match_bipartite_greedy 中匹配的 anchor_box 整列设置为 0 了.
 
     Arguments:
         weight_matrix (np.array): A 2D Numpy array that represents the weight matrix for the matching process.
             If `(m,n)` is the shape of the weight matrix, it must be `m <= n`.
             The weights can be integers or floating point numbers.
             The matching process will maximize, i.e. larger weights are preferred over smaller weights.
+            # 某一列中只取最大的 overlap 值, 来和 threshold 比较, 所以一个 anchor_box 最多和一个 gt_box 匹配.
         threshold (float): A float that represents the threshold (i.e. lower bound) that must be met by a pair of
             elements to produce a match.
 
@@ -106,19 +108,20 @@ def match_multi(weight_matrix, threshold):
     """
 
     num_anchor_boxes = weight_matrix.shape[1]
-    all_anchor_indices = list(range(num_anchor_boxes))  # Only relevant for fancy-indexing below.
+    # Only relevant for fancy-indexing below.
+    all_anchor_indices = list(range(num_anchor_boxes))
 
     # Find the best ground truth match for every anchor box.
-    # Array of shape (weight_matrix.shape[1],) 也就是 (num_anchor_boxes, )
+    # Array of shape (weight_matrix.shape[1],), 也就是 (num_anchor_boxes, )
     # 每一个元素表示每一个 anchor_box 对应最大 iou 的 gt_box 的 id
     ground_truth_indices = np.argmax(weight_matrix, axis=0)
-    # Array of shape (weight_matrix.shape[1],)
+    # Array of shape (weight_matrix.shape[1],), 也就是 (num_anchor_boxes, )
     # 每一个元素表示每一个 anchor_box 和所有 gt_boxes 对应的最大 iou
     overlaps = weight_matrix[ground_truth_indices, all_anchor_indices]
 
     # Filter out the matches with a weight below the threshold.
     # shape 为 (num_anchor_boxes, ), 每一个元素为 True 表示该 anchor_box 是满足条件的, 就是和 gt_boxes 的最大 iou 是大于阈值的
-    # np.nonzero() 返回非 zero 的值的 indices 从小到大排列
+    # np.nonzero() 返回 tuple, tuple 的每一个值表示 非 zero 的值的在某一个维度上的 indices 和 np.where 比较像
     anchor_indices_thresh_met = np.nonzero(overlaps >= threshold)[0]
     # shape 为 (num_anchor_boxes, ), 每一个元素表示符合条件的 anchor_box 对应的 gt_box 的 id
     gt_indices_thresh_met = ground_truth_indices[anchor_indices_thresh_met]

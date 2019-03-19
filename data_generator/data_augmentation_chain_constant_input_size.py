@@ -39,11 +39,15 @@ class DataAugmentationConstantInputSize:
                  random_saturation=(0.5, 1.8, 0.5),
                  random_hue=(18, 0.5),
                  random_flip=0.5,
+                 # 最后一个元素表示 prob
                  random_translate=((0.03, 0.5), (0.03, 0.5), 0.5),
+                 # 最后一个元素表示 prob
                  random_scale=(0.5, 2.0, 0.5),
+                 # translate or scale 后的 image 如果不合格可以重复进行的最大次数
                  n_trials_max=3,
                  clip_boxes=True,
-                 overlap_criterion='area',
+                 overlap_criterion_box_filter='area',
+                 overlap_criterion_validator='area',
                  bounds_box_filter=(0.3, 1.0),
                  bounds_validator=(0.5, 1.0),
                  n_boxes_min=1,
@@ -54,13 +58,12 @@ class DataAugmentationConstantInputSize:
             raise ValueError(
                 "This sequence of transformations only makes sense"
                 "if the minimum scaling factor is <1 and the maximum scaling factor is >1.")
-        # translate or scale 后的 image 如果不合格可以重复进行的最大次数
         self.n_trials_max = n_trials_max
         self.clip_boxes = clip_boxes
-        self.overlap_criterion = overlap_criterion
+        self.overlap_criterion_box_filter = overlap_criterion_box_filter
+        self.overlap_criterion_validator = overlap_criterion_validator
         self.bounds_box_filter = bounds_box_filter
         self.bounds_validator = bounds_validator
-        # trans
         self.n_boxes_min = n_boxes_min
         self.background = background
         self.labels_format = labels_format
@@ -69,13 +72,13 @@ class DataAugmentationConstantInputSize:
         self.box_filter = BoxFilter(check_overlap=True,
                                     check_min_area=True,
                                     check_degenerate=True,
-                                    overlap_criterion=self.overlap_criterion,
+                                    overlap_criterion=self.overlap_criterion_box_filter,
                                     overlap_bounds=self.bounds_box_filter,
                                     min_area=16,
                                     labels_format=self.labels_format)
 
         # Determines whether the result of the transformations is a valid training image.
-        self.image_validator = ImageValidator(overlap_criterion=self.overlap_criterion,
+        self.image_validator = ImageValidator(overlap_criterion=self.overlap_criterion_validator,
                                               overlap_bounds=self.bounds_validator,
                                               n_boxes_min=self.n_boxes_min,
                                               labels_format=self.labels_format)
@@ -153,6 +156,7 @@ class DataAugmentationConstantInputSize:
         self.sequence2 = [self.convert_to_3_channels,
                           self.convert_to_float32,
                           self.random_brightness,
+                          self.random_contrast,
                           self.convert_to_uint8,
                           self.convert_RGB_to_HSV,
                           self.convert_to_float32,
@@ -161,8 +165,6 @@ class DataAugmentationConstantInputSize:
                           self.convert_to_uint8,
                           self.convert_HSV_to_RGB,
                           self.convert_to_float32,
-                          self.random_contrast,
-                          self.convert_to_uint8,
                           self.random_zoom_out,
                           self.random_translate,
                           self.random_flip]

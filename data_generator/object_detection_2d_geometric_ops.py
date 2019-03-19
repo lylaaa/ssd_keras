@@ -172,6 +172,7 @@ class Flip:
         xmax = self.labels_format.index('xmax')
         ymax = self.labels_format.index('ymax')
         if self.dim == 'horizontal':
+            # 左右翻转
             image = image[:, ::-1]
             if labels is None:
                 return image
@@ -181,6 +182,7 @@ class Flip:
                 labels[:, [xmin, xmax]] = img_width - 1 - labels[:, [xmax, xmin]]
                 return image, labels
         else:
+            # 上下翻转
             image = image[::-1]
             if labels is None:
                 return image
@@ -246,8 +248,8 @@ class Translate:
             dx (float): The fraction of the image width by which to translate images along the horizontal axis.
                 Positive values translate images to the right, negative values translate images to the left.
             clip_boxes (bool, optional): Only relevant if ground truth bounding boxes are given.
-                If `True`, any ground truth bounding boxes will be clipped to lie entirely within the
-                image after the translation.
+                If `True`, any ground truth bounding boxes will be clipped to lie entirely within the image after the
+                translation.
             box_filter (BoxFilter, optional): Only relevant if ground truth bounding boxes are given.
                 A `BoxFilter` object to filter out bounding boxes that don't meet the given criteria
                 after the transformation. Refer to the `BoxFilter` documentation for details. If `None`,
@@ -268,7 +270,6 @@ class Translate:
         self.labels_format = labels_format
 
     def __call__(self, image, labels=None):
-
         img_height, img_width = image.shape[:2]
 
         # Compute the translation matrix.
@@ -291,8 +292,8 @@ class Translate:
             ymin = self.labels_format.index('ymin')
             xmax = self.labels_format.index('xmax')
             ymax = self.labels_format.index('ymax')
-
             labels = np.copy(labels)
+
             # Translate the box coordinates to the translated image's coordinate system.
             labels[:, [xmin, xmax]] += dx_abs
             labels[:, [ymin, ymax]] += dy_abs
@@ -341,8 +342,8 @@ class RandomTranslate:
             prob (float, optional): `(1 - prob)` determines the probability with which the original, unaltered image is
                 returned.
             clip_boxes (bool, optional): Only relevant if ground truth bounding boxes are given.
-                If `True`, any ground truth bounding boxes will be clipped to lie entirely within the
-                image after the translation.
+                If `True`, any ground truth bounding boxes will be clipped to lie entirely within the image after the
+                translation.
             box_filter (BoxFilter, optional): Only relevant if ground truth bounding boxes are given.
                 A `BoxFilter` object to filter out bounding boxes that don't meet the given criteria
                 after the transformation. Refer to the `BoxFilter` documentation for details. If `None`,
@@ -353,11 +354,12 @@ class RandomTranslate:
             n_trials_max (int, optional): Only relevant if ground truth bounding boxes are given.
                 Determines the maximum number of trials to produce a valid image. If no valid image could
                 be produced in `n_trials_max` trials, returns the unaltered input image.
-            background (list/tuple, optional): A 3-tuple specifying the RGB color value of the
+            background (list/tuple, optional): A 3-int list/tuple specifying the RGB color value of the
                 background pixels of the translated images.
             labels_format (dict, optional): A list or tuple that defines what in the last axis of the labels
                 of an image. The list or tuple contains at least the keywords 'xmin', 'ymin', 'xmax', and 'ymax'.
         """
+
         if dy_minmax[0] > dy_minmax[1]:
             raise ValueError("It must be `dy_minmax[0] <= dy_minmax[1]`.")
         if dx_minmax[0] > dx_minmax[1]:
@@ -398,23 +400,23 @@ class RandomTranslate:
 
             for _ in range(max(1, self.n_trials_max)):
                 # Pick the relative amount by which to translate.
-                dy_abs = np.random.uniform(self.dy_minmax[0], self.dy_minmax[1])
-                dx_abs = np.random.uniform(self.dx_minmax[0], self.dx_minmax[1])
+                dy_rel = np.random.uniform(self.dy_minmax[0], self.dy_minmax[1])
+                dx_rel = np.random.uniform(self.dx_minmax[0], self.dx_minmax[1])
                 # Pick the direction in which to translate.
-                dy = np.random.choice([-dy_abs, dy_abs])
-                dx = np.random.choice([-dx_abs, dx_abs])
-                self.translate.dy_rel = dy
-                self.translate.dx_rel = dx
+                dy_rel = np.random.choice([-dy_rel, dy_rel])
+                dx_rel = np.random.choice([-dx_rel, dx_rel])
+                self.translate.dy_rel = dy_rel
+                self.translate.dx_rel = dx_rel
 
-                if (labels is None) or (labels is not None or self.image_validator is None):
+                if (labels is None) or (self.image_validator is None):
                     # We either don't have any boxes or we do but we have no image_validator,
                     # we will accept any outcome as valid.
                     return self.translate(image, labels)
                 else:
                     # Translate the box coordinates to the translated image's coordinate system.
                     new_labels = labels.copy()
-                    new_labels[:, [ymin, ymax]] += int(round(img_height * dy))
-                    new_labels[:, [xmin, xmax]] += int(round(img_width * dx))
+                    new_labels[:, [ymin, ymax]] += int(round(img_height * dy_rel))
+                    new_labels[:, [xmin, xmax]] += int(round(img_width * dx_rel))
 
                     # Check if the patch is valid.
                     if self.image_validator(labels=new_labels,
@@ -493,11 +495,11 @@ class Scale:
             # Scale the bounding boxes accordingly.
             # Transform two opposite corner points of the rectangular boxes using the rotation matrix `M`.
             # 这波操作要比 mask_rcnn 中对原图进行 resize 后的操作要更方便一点
-            # shape 为 (3, num_labels)
+            # shape 为 (3, num_gt_boxes)
             top_lefts = np.array([labels[:, xmin], labels[:, ymin], np.ones(labels.shape[0])])
-            # shape 为 (3, num_labels)
+            # shape 为 (3, num_gt_boxes)
             bottom_rights = np.array([labels[:, xmax], labels[:, ymax], np.ones(labels.shape[0])])
-            # dot 为 (2,3).(3,num_labels) = (2,num_labels) 再转置成 (num_labels, 2)
+            # dot 为 (2,3).(3,num_gt_boxes) = (2,num_gt_boxes) 再转置成 (num_gt_boxes, 2)
             new_top_lefts = (np.dot(rotation_matrix, top_lefts)).T
             new_bottom_rights = (np.dot(rotation_matrix, bottom_rights)).T
             labels[:, [xmin, ymin]] = np.round(new_top_lefts, decimals=0).astype(np.int)
@@ -604,7 +606,7 @@ class RandomScale:
                 self.scale.factor = factor
 
                 # Adam
-                if (labels is None) or (labels is not None and self.image_validator is None):
+                if (labels is None) or (self.image_validator is None):
                     # We either don't have any boxes or image_validator, we will accept any outcome as valid.
                     return self.scale(image, labels)
                 else:

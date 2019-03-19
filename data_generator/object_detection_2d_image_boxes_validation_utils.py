@@ -139,12 +139,16 @@ class BoxFilter:
         """
         if not isinstance(overlap_bounds, (list, tuple, BoundGenerator)):
             raise ValueError("`overlap_bounds` must be either a 2-tuple of scalars or a `BoundGenerator` object.")
-        if isinstance(overlap_bounds, (list, tuple)) and (overlap_bounds[0] > overlap_bounds[1]):
-            raise ValueError("The lower bound must not be greater than the upper bound.")
+        if isinstance(overlap_bounds, (list, tuple)):
+            # Adam
+            if len(overlap_bounds) != 2:
+                raise ValueError("overlap_bounds` must be a 2-scalar of list or tuple")
+            if overlap_bounds[0] > overlap_bounds[1]:
+                raise ValueError("The lower bound must not be greater than the upper bound.")
         if overlap_criterion not in {'iou', 'area', 'center_point'}:
-            raise ValueError("`overlap_criterion` must be one of 'iou', 'area', or 'center_point'.")
+            raise ValueError("`overlap_criterion` must be one of 'iou', 'area' and 'center_point'.")
         if border_pixels not in {'include', 'exclude', 'half'}:
-            raise ValueError("`border_pixels` must be one of 'include', 'exclude', or 'half'.")
+            raise ValueError("`border_pixels` must be one of 'include', 'exclude' and 'half'.")
 
         self.overlap_criterion = overlap_criterion
         self.overlap_bounds = overlap_bounds
@@ -199,7 +203,6 @@ class BoxFilter:
                 lower, upper = self.overlap_bounds()
             else:
                 lower, upper = self.overlap_bounds
-
             # Compute which boxes are valid.
             if self.overlap_criterion == 'iou':
                 # Compute the patch coordinates.
@@ -211,8 +214,17 @@ class BoxFilter:
                                       coords='corners',
                                       mode='element-wise',
                                       border_pixels=self.border_pixels)
-                requirements_met *= (image_boxes_iou > lower) * (image_boxes_iou <= upper)
-
+                # Check which boxes meet the overlap requirements.
+                # If `self.lower == 0`, we want to make sure that boxes with area 0 don't count,
+                # hence the ">" sign instead of the ">=" sign.
+                if lower == 0.0:
+                    mask_lower = image_boxes_iou > lower
+                # Especially for the case `self.lower == 1` we want the ">=" sign,
+                # otherwise no boxes would count at all.
+                else:
+                    mask_lower = image_boxes_iou >= lower
+                mask_upper = image_boxes_iou <= upper
+                requirements_met *= mask_lower * mask_upper
             elif self.overlap_criterion == 'area':
                 if self.border_pixels == 'half':
                     d = 0
@@ -237,13 +249,12 @@ class BoxFilter:
                 # hence the ">" sign instead of the ">=" sign.
                 if lower == 0.0:
                     mask_lower = intersection_areas > lower * box_areas
+                # Especially for the case `self.lower == 1` we want the ">=" sign,
+                # otherwise no boxes would count at all.
                 else:
-                    # Especially for the case `self.lower == 1` we want the ">=" sign,
-                    # otherwise no boxes would count at all.
                     mask_lower = intersection_areas >= lower * box_areas
                 mask_upper = intersection_areas <= upper * box_areas
                 requirements_met *= mask_lower * mask_upper
-
             elif self.overlap_criterion == 'center_point':
                 # Compute the center points of the boxes.
                 cy = (labels[:, ymin] + labels[:, ymax]) / 2
@@ -257,7 +268,7 @@ class BoxFilter:
 class ImageValidator:
     """
     Returns `True` if a given minimum number of bounding boxes meets given overlap requirements with an image of a given
-    height and width.
+    height and width. 检查符合 overlap criterion 的 boxes 的数量大于等于 n_boxes_min.
     """
 
     def __init__(self,

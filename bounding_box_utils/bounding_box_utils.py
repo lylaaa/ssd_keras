@@ -244,7 +244,6 @@ def intersection_area_(boxes1, boxes2, coords='corners', mode='outer_product', b
 
     m = boxes1.shape[0]  # The number of boxes in `boxes1`
     n = boxes2.shape[0]  # The number of boxes in `boxes2`
-
     # Set the correct coordinate indices for the respective formats.
     if coords == 'corners':
         xmin = 0
@@ -256,7 +255,6 @@ def intersection_area_(boxes1, boxes2, coords='corners', mode='outer_product', b
         xmax = 1
         ymin = 2
         ymax = 3
-
     if border_pixels == 'half':
         d = 0
     # If border pixels are supposed to belong to the bounding boxes, we have to
@@ -268,31 +266,25 @@ def intersection_area_(boxes1, boxes2, coords='corners', mode='outer_product', b
     # subtract one pixel from any difference `x_max - x_min` or `y_max - y_min`.
     elif border_pixels == 'exclude':
         d = -1
-
     # Compute the intersection areas.
     if mode == 'outer_product':
         # For all possible box combinations, get the greater x_min and y_min values.
         # This is a tensor of shape (m,n,2).
         min_xy = np.maximum(np.tile(np.expand_dims(boxes1[:, [xmin, ymin]], axis=1), reps=(1, n, 1)),
                             np.tile(np.expand_dims(boxes2[:, [xmin, ymin]], axis=0), reps=(m, 1, 1)))
-
         # For all possible box combinations, get the smaller x_max and y_max values.
         # This is a tensor of shape (m,n,2).
         max_xy = np.minimum(np.tile(np.expand_dims(boxes1[:, [xmax, ymax]], axis=1), reps=(1, n, 1)),
                             np.tile(np.expand_dims(boxes2[:, [xmax, ymax]], axis=0), reps=(m, 1, 1)))
-
         # Compute the side lengths of the intersection rectangles.
         side_lengths = np.maximum(0, max_xy - min_xy + d)
-
+        # shape 为 (m, n)
         return side_lengths[:, :, 0] * side_lengths[:, :, 1]
-
     elif mode == 'element-wise':
         min_xy = np.maximum(boxes1[:, [xmin, ymin]], boxes2[:, [xmin, ymin]])
         max_xy = np.minimum(boxes1[:, [xmax, ymax]], boxes2[:, [xmax, ymax]])
-
         # Compute the side lengths of the intersection rectangles.
         side_lengths = np.maximum(0, max_xy - min_xy + d)
-
         return side_lengths[:, 0] * side_lengths[:, 1]
 
 
@@ -328,8 +320,8 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
             Can be 'include', 'exclude', or 'half'.
             If 'include', the border pixels belong to the boxes.
             If 'exclude', the border pixels do not belong to the boxes.
-            If 'half', then one of each of the two horizontal and vertical borders belong to the boxes,
-                but not the other.
+            If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
+            other.
 
     Returns:
         A 1D or 2D Numpy array (refer to the `mode` argument for details) of dtype float containing values in [0,1],
@@ -338,6 +330,9 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
         1 means their coordinates are identical.
     """
 
+    #########################################################################################
+    # Check for arguments' validation
+    #########################################################################################
     # Make sure the boxes have the right shapes.
     if boxes1.ndim > 2:
         raise ValueError("boxes1 must have rank either 1 or 2, but has rank {}.".format(boxes1.ndim))
@@ -364,16 +359,14 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
     elif coords not in {'minmax', 'corners'}:
         raise ValueError("Unexpected value for `coords`. Supported values are 'minmax', 'corners' and 'centroids'.")
 
-    # Compute the IoU.
-
+    #########################################################################################
+    # Compute the IoU
+    #########################################################################################
     # Compute the intersection areas.
     intersection_areas = intersection_area_(boxes1, boxes2, coords=coords, mode=mode)
-
     m = boxes1.shape[0]  # The number of boxes in `boxes1`
     n = boxes2.shape[0]  # The number of boxes in `boxes2`
-
     # Compute the union areas.
-
     # Set the correct coordinate indices for the respective formats.
     if coords == 'corners':
         xmin = 0
@@ -385,7 +378,6 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
         xmax = 1
         ymin = 2
         ymax = 3
-
     if border_pixels == 'half':
         d = 0
     # If border pixels are supposed to belong to the bounding boxes,
@@ -396,7 +388,6 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
     # we have to subtract one pixel from any difference `x_max - x_min` or `y_max - y_min`.
     elif border_pixels == 'exclude':
         d = -1
-
     if mode == 'outer_product':
         # 每一行 n 个相同的数, 表示 boxes1 中某个 box 的 area, 一共 m 行
         boxes1_areas = np.tile(
@@ -406,8 +397,8 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
         boxes2_areas = np.tile(
             np.expand_dims((boxes2[:, xmax] - boxes2[:, xmin] + d) * (boxes2[:, ymax] - boxes2[:, ymin] + d), axis=0),
             reps=(m, 1))
-
-    elif mode == 'element-wise':
+    # mode == 'element-wise'
+    else:
         # 如果
         boxes1_areas = (boxes1[:, xmax] - boxes1[:, xmin] + d) * (boxes1[:, ymax] - boxes1[:, ymin] + d)
         boxes2_areas = (boxes2[:, xmax] - boxes2[:, xmin] + d) * (boxes2[:, ymax] - boxes2[:, ymin] + d)

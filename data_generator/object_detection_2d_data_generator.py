@@ -357,7 +357,7 @@ class DataGenerator:
                     # For each element in the output format
                     # defaults: the elements are the class ID and the four box coordinates (xmin,ymin,xmax,ymax)
                     for element in self.labels_output_format:
-                        # ...select the respective column in the input format and append it to `box`.
+                        # select the respective column in the input format and append it to `box`.
                         box.append(int(row[self.input_format.index(element)].strip()))
                     data.append(box)
 
@@ -1173,8 +1173,8 @@ class DataGenerator:
                             else:
                                 batch_x[i] = transform(batch_x[i])
 
-                        # In case the transform failed to produce an output image,
-                        # which is possible for some random transforms.
+                        # In case the transform failed to produce an output image, which is possible for some random
+                        # transforms. 究竟什么情况下才会发生这种情况?
                         if batch_x[i] is None:
                             batch_items_to_remove.append(i)
                             batch_inverse_transforms.append([])
@@ -1264,24 +1264,34 @@ class DataGenerator:
             #########################################################################################
             ret = []
             if 'processed_images' in returns:
+                # np.array
                 ret.append(batch_x)
             if 'encoded_labels' in returns:
+                # np.array
                 ret.append(batch_y_encoded)
             if 'matched_anchors' in returns:
+                # np.array
                 ret.append(batch_matched_anchors)
             if 'processed_labels' in returns:
+                # list
                 ret.append(batch_y)
             if 'filenames' in returns:
+                # list
                 ret.append(batch_filenames)
             if 'image_ids' in returns:
+                # list
                 ret.append(batch_image_ids)
             if 'evaluation_neutral' in returns:
+                # list
                 ret.append(batch_eval_neutral)
             if 'inverse_transform' in returns:
+                # list
                 ret.append(batch_inverse_transforms)
             if 'original_images' in returns:
+                # list
                 ret.append(batch_original_images)
             if 'original_labels' in returns:
+                # list
                 ret.append(batch_original_labels)
             yield ret
 
