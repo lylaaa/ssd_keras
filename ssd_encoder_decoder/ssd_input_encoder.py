@@ -145,38 +145,72 @@ class SSDInputEncoder:
         """
 
         ##################################################################################
-        # Handle exceptions.
+        # check and set parameters' value
         ##################################################################################
+        if not (isinstance(img_height, int) and isinstance(img_width, int)):
+            raise ValueError('`img_height` and `img_width` must be float')
+        elif not (img_height > 0 and img_width > 0):
+            raise ValueError('`img_height` and `img_width` must be greater than 0')
+        else:
+            self.img_height = img_height
+            self.img_width = img_width
+
+        if not (isinstance(n_classes, int) and n_classes > 0):
+            raise ValueError('`n_classes` must be a positive int')
+        else:
+            # +1 for background class
+            self.n_classes = n_classes + 1
+
         if not (isinstance(predictor_sizes, list) and predictor_sizes):
             raise ValueError("`predictor_sizes must be a list and not empty")
         else:
             for predictor_size in predictor_sizes:
                 if not (isinstance(predictor_size, tuple) and len(predictor_size) == 2):
                     raise ValueError("Element of `predictor_sizes` must be a 2-int tuple")
-        predictor_sizes = np.array(predictor_sizes)
+            else:
+                predictor_sizes = np.array(predictor_sizes)
+                self.predictor_sizes = predictor_sizes
 
         if (min_scale is None or max_scale is None) and scales is None:
             raise ValueError("Either `min_scale` and `max_scale` or `scales` need to be specified.")
-
-        if scales:
+        elif scales:
             if not isinstance(scales, (list, tuple)):
                 raise ValueError("It must be either `scales` is None, a list or a tuple")
             elif len(scales) != predictor_sizes.shape[0] + 1:
                 raise ValueError(
-                    "If `scales' is a list, it must meet len(scales) == len(predictor_sizes) + 1, "
+                    "If `scales' is a list/tuple, it must meet len(scales) == len(predictor_sizes) + 1, "
                     "but len(scales) == {} and len(predictor_sizes) + 1 == {}".format(
                         len(scales), len(predictor_sizes) + 1))
-            scales = np.array(scales)
-            if np.any(scales <= 0):
-                raise ValueError(
-                    "All values in `scales` must be greater than 0, but the passed list of scales is {}".format(scales))
+            else:
+                scales = np.array(scales)
+                if np.any(scales <= 0):
+                    raise ValueError(
+                        "All values in `scales` must be greater than 0, but the passed list of scales is {}".format(scales))
+                else:
+                    self.scales = scales
+                    self.min_scale = min_scale
+                    self.max_scale = max_scale
         else:
-            # If no list of scales was passed, we need to make sure that `min_scale` and `max_scale` are valid values.
+            # If no explicit list of scaling factors was passed, we need to
+            # 1. make sure that `min_scale` and `max_scale` are valid values.
+            # 2. compute the list of scaling factors from `min_scale` and `max_scale`
             if not 0 < min_scale <= max_scale:
                 raise ValueError(
                     "It must be 0 < min_scale <= max_scale, but it is min_scale = {} and max_scale = {}".format(
                         min_scale, max_scale))
+            else:
+                scales = np.linspace(min_scale, max_scale, len(predictor_sizes) + 1)
+                self.scales = scales
+                self.min_scale = min_scale
+                self.max_scale = max_scale
 
+        # two_boxes_for_ar1
+        if not (isinstance(two_boxes_for_ar1, bool)):
+            raise ValueError('`two_boxes_for_ar1` must be bool')
+        else:
+            self.two_boxes_for_ar1 = two_boxes_for_ar1
+
+        # aspect_ratios
         if aspect_ratios_per_layer is not None:
             if not isinstance(aspect_ratios_per_layer, (list, tuple)):
                 raise ValueError("It must be either `aspect_ratios_per_layer` is None, a list or a tuple")
@@ -186,107 +220,120 @@ class SSDInputEncoder:
                     "len(aspect_ratios_per_layer) == len(predictor_sizes), "
                     "but len(aspect_ratios_per_layer) == {} and len(predictor_sizes) == {}".format(
                         len(aspect_ratios_per_layer), len(predictor_sizes)))
-            for aspect_ratios in aspect_ratios_per_layer:
-                if not (isinstance(aspect_ratios, (list, tuple)) and aspect_ratios):
-                    raise ValueError("All aspect ratios must be a list or tuple and not empty")
-                if np.any(np.array(aspect_ratios) <= 0):
-                    raise ValueError("All aspect ratios must be greater than zero.")
+            else:
+                for aspect_ratios in aspect_ratios_per_layer:
+                    if not (isinstance(aspect_ratios, (list, tuple)) and aspect_ratios):
+                        raise ValueError("All aspect ratios must be a list or tuple and not empty")
+                    # NOTE 当 aspect_ratios 为 () 或 [], np.any(np.array(aspect_ratios)) <=0 为 False, 所以必须有上面的判断
+                    elif np.any(np.array(aspect_ratios) <= 0):
+                        raise ValueError("All aspect ratios must be greater than zero.")
+                else:
+                    # If aspect ratios are given per layer, we'll use those.
+                    self.aspect_ratios = aspect_ratios_per_layer
+                    # Compute the number of boxes per spatial location for each predictor layer.
+                    # For example, if a predictor layer has three different aspect ratios, [1.0, 0.5, 2.0], and is
+                    # supposed to predict two boxes of slightly different size for aspect ratio 1.0, then that predictor
+                    # layer predicts a total of four boxes at every spatial location across the feature map.
+                    self.n_boxes = []
+                    for aspect_ratios in aspect_ratios_per_layer:
+                        # Adam
+                        if (1 in aspect_ratios) and two_boxes_for_ar1:
+                            self.n_boxes.append(len(aspect_ratios) + 1)
+                        else:
+                            self.n_boxes.append(len(aspect_ratios))
         else:
             if aspect_ratios_global is None:
                 raise ValueError(
                     "At least one of `aspect_ratios_global` and `aspect_ratios_per_layer` must not be `None`.")
-            if np.any(np.array(aspect_ratios_global) <= 0):
+            elif not (isinstance(aspect_ratios_global, (list, tuple)) and aspect_ratios_global):
+                raise ValueError(
+                    "`aspect_ratios_global` must be a list/tuple and not empty when `aspect_ratios_per_layer` is None")
+            # NOTE 当 aspect_ratios_global 为 () 或 [], np.any(np.array(aspect_ratios)) <=0 为 False, 所以必须有上面的判断
+            elif np.any(np.array(aspect_ratios_global) <= 0):
                 raise ValueError("All aspect ratios must be greater than zero.")
+            else:
+                # If `aspect_ratios_per_layer` is None, then we use the same list of aspect ratios
+                # `aspect_ratios_global` for all predictor layers.
+                self.aspect_ratios = [aspect_ratios_global] * predictor_sizes.shape[0]
+                if (1 in aspect_ratios_global) and two_boxes_for_ar1:
+                    self.n_boxes = len(aspect_ratios_global) + 1
+                else:
+                    self.n_boxes = len(aspect_ratios_global)
+                self.n_boxes = [self.n_boxes] * predictor_sizes.shape[0]
+
+        if steps is not None:
+            if not (isinstance(steps, (list, tuple)) and (len(steps) == predictor_sizes.shape[0])):
+                raise ValueError("You must provide at least one step value per predictor layer.")
+            else:
+                self.steps = steps
+        else:
+            self.steps = [None] * predictor_sizes.shape[0]
+
+        if offsets is not None:
+            if not (isinstance(offsets, (list, tuple)) and (len(offsets) == predictor_sizes.shape[0])):
+                raise ValueError("You must provide at least one offset value per predictor layer.")
+            else:
+                self.offsets = offsets
+        else:
+            self.offsets = [None] * predictor_sizes.shape[0]
+
+        if not (isinstance(clip_boxes, bool)):
+            raise ValueError('`clip_boxes` must be bool')
+        else:
+            self.clip_boxes = clip_boxes
 
         if not (isinstance(variances, (list, tuple)) and len(variances) == 4):
+            # We need one variance value for each of the four box coordinates
             raise ValueError("4 variance values must be passed, but {} values were received.".format(len(variances)))
         else:
             variances = np.array(variances)
             if np.any(variances <= 0):
                 raise ValueError("All variances must be >0, but the variances given are {}".format(variances))
+            else:
+                self.variances = variances
+
+        if matching_type not in ('bipartite', 'multi'):
+            raise ValueError("Unexpected value for `matching_type`. Supported values are 'bipartite', 'multi'.")
+        else:
+            self.matching_type = matching_type
+
+        if not isinstance(pos_iou_threshold, float):
+            raise ValueError('`pos_iou_threshold` must be float')
+        else:
+            self.pos_iou_threshold = pos_iou_threshold
+
+        if not isinstance(neg_iou_limit, float):
+            raise ValueError('`neg_iou_limit` must be float')
+        else:
+            self.neg_iou_limit = neg_iou_limit
+
+        if border_pixels not in ('half', 'include', 'exclude'):
+            raise ValueError(
+                "Unexpected value for `border_pixels`. Supported values are 'half', 'include' and 'exclude'.")
+        else:
+            self.border_pixels = border_pixels
 
         if coords not in ('minmax', 'centroids', 'corners'):
             raise ValueError("Unexpected value for `coords`. Supported values are 'minmax', 'corners' and 'centroids'.")
-
-        if steps is not None:
-            if not (isinstance(steps, (list, tuple)) and (len(steps) == predictor_sizes.shape[0])):
-                raise ValueError("You must provide at least one step value per predictor layer.")
-
-        if offsets is not None:
-            if not (isinstance(offsets, (list, tuple)) and (len(offsets) == predictor_sizes.shape[0])):
-                raise ValueError("You must provide at least one offset value per predictor layer.")
-
-        ##################################################################################
-        # Set or compute members.
-        ##################################################################################
-
-        self.img_height = img_height
-        self.img_width = img_width
-        # + 1 for the background class
-        self.n_classes = n_classes + 1
-        self.predictor_sizes = predictor_sizes
-        self.min_scale = min_scale
-        self.max_scale = max_scale
-        # If `scales` is None, compute the scaling factors by linearly interpolating between
-        # `min_scale` and `max_scale`. If an explicit list of `scales` is given, however,
-        # then it takes precedent over `min_scale` and `max_scale`.
-        if scales is None:
-            self.scales = np.linspace(self.min_scale, self.max_scale, len(self.predictor_sizes) + 1)
         else:
-            # If a list of scales is given explicitly,
-            # we'll use that instead of computing it from `min_scale` and `max_scale`.
-            self.scales = scales
-        # If `aspect_ratios_per_layer` is None, then we use the same list of aspect ratios
-        # `aspect_ratios_global` for all predictor layers. If `aspect_ratios_per_layer` is given,
-        # however, then it takes precedent over `aspect_ratios_global`.
-        if aspect_ratios_per_layer is None:
-            self.aspect_ratios = [aspect_ratios_global] * predictor_sizes.shape[0]
-        else:
-            # If aspect ratios are given per layer, we'll use those.
-            self.aspect_ratios = aspect_ratios_per_layer
-        self.two_boxes_for_ar1 = two_boxes_for_ar1
-        if steps is not None:
-            self.steps = steps
-        else:
-            self.steps = [None] * predictor_sizes.shape[0]
-        if offsets is not None:
-            self.offsets = offsets
-        else:
-            self.offsets = [None] * predictor_sizes.shape[0]
-        self.clip_boxes = clip_boxes
-        self.variances = variances
-        self.matching_type = matching_type
-        self.pos_iou_threshold = pos_iou_threshold
-        self.neg_iou_limit = neg_iou_limit
-        self.border_pixels = border_pixels
-        self.coords = coords
-        self.normalize_coords = normalize_coords
-        self.background_id = background_id
+            self.coords = coords
 
-        # Compute the number of boxes per spatial location for each predictor layer.
-        # For example, if a predictor layer has three different aspect ratios, [1.0, 0.5, 2.0], and is
-        # supposed to predict two boxes of slightly different size for aspect ratio 1.0, then that predictor
-        # layer predicts a total of four boxes at every spatial location across the feature map.
-        if aspect_ratios_per_layer is not None:
-            self.n_boxes = []
-            for aspect_ratios in aspect_ratios_per_layer:
-                # Adam
-                if (1 in aspect_ratios) and two_boxes_for_ar1:
-                    self.n_boxes.append(len(aspect_ratios) + 1)
-                else:
-                    self.n_boxes.append(len(aspect_ratios))
+        if not (isinstance(normalize_coords, bool)):
+            raise ValueError('`clip_boxes` must be bool')
         else:
-            if (1 in aspect_ratios_global) and two_boxes_for_ar1:
-                self.n_boxes = len(aspect_ratios_global) + 1
-            else:
-                self.n_boxes = len(aspect_ratios_global)
+            self.normalize_coords = normalize_coords
+
+        if not (isinstance(background_id, int) and background_id >= 0):
+            raise ValueError('`background_id` must be >= 0')
+        else:
+            self.background_id = background_id
 
         ##################################################################################
         # Compute the anchor boxes for each predictor layer.
         ##################################################################################
 
-        # Compute the anchor boxes for each predictor layer. We only have to do this once
-        # since the anchor boxes depend only on the model configuration, not on the input data.
+        # We only have to do this once since the anchor boxes depend only on the model configuration, not on the input
+        # data.
         # For each predictor layer (i.e. for each scaling factor) the tensors for that layer's
         # anchor boxes will have the shape `(feature_map_height, feature_map_width, n_boxes, 4)`.
 
@@ -307,7 +354,7 @@ class SSDInputEncoder:
 
         # Iterate over all predictor layers and compute the anchor boxes for each one.
         for i in range(len(self.predictor_sizes)):
-            # boxes 为 np.array, shape 为 (predictor_sizes[i][0], predictor_sizes[i][1], self.n_boxes, 4)
+            # boxes 为 np.array, shape 为 (predictor_sizes[i][0], predictor_sizes[i][1], self.n_boxes[i], 4)
             # center 为 tuple, 有两个 np.array 类型的元素, 每个元素的 shape 为 (predictor_sizes[i][0], predictor_sizes[i][1])
             # wh 为 np.array, shape 为 (self.n_boxes, 2)
             # step 为 tuple, 有两个 int/float 类型的元素
@@ -319,6 +366,7 @@ class SSDInputEncoder:
                 next_scale=self.scales[i + 1],
                 this_steps=self.steps[i],
                 this_offsets=self.offsets[i],
+                n_boxes=self.n_boxes[i],
                 diagnostics=True)
             self.boxes_list.append(boxes)
             self.centers_diag.append(center)
@@ -355,7 +403,7 @@ class SSDInputEncoder:
         """
 
         # Mapping to define which indices represent which coordinates in the ground truth.
-        class_id = labels_format.index('labels_format')
+        class_id = labels_format.index('class_id')
         xmin = labels_format.index('xmin')
         ymin = labels_format.index('ymin')
         xmax = labels_format.index('xmax')
@@ -532,6 +580,7 @@ class SSDInputEncoder:
                                         aspect_ratios,
                                         this_scale,
                                         next_scale,
+                                        n_boxes,
                                         this_steps=None,
                                         this_offsets=None,
                                         diagnostics=False):
@@ -548,6 +597,7 @@ class SSDInputEncoder:
                 as a fraction of the shorter side of the input image.
             next_scale (float): A float in [0, 1], the next larger scaling factor. Only relevant if
                 `self.two_boxes_for_ar1 == True`.
+            n_boxes (int): An int, number of anchor boxes of one pixel in feature map
             this_steps (int or 2-int tuple):
             this_offsets (float or 2-float tuple):
             diagnostics (bool, optional): If true, the following additional outputs will be returned:
@@ -585,6 +635,8 @@ class SSDInputEncoder:
                 box_height = this_scale * size / np.sqrt(aspect_ratio)
                 wh_list.append((box_width, box_height))
         wh_list = np.array(wh_list)
+        assert len(wh_list) == n_boxes, \
+            'incorrect number of anchor boxes, len(wh_list)={} and n_boxes={}'.format(wh_list, n_boxes)
 
         ##################################################################################
         # Compute the grid of box center points. They are identical for all aspect ratios.
@@ -635,10 +687,10 @@ class SSDInputEncoder:
 
         # Create a 4D tensor template of shape `(feature_map_height, feature_map_width, n_boxes, 4)`
         # where the last dimension will contain `(cx, cy, w, h)`
-        boxes_tensor = np.zeros((feature_map_size[0], feature_map_size[1], self.n_boxes, 4))
+        boxes_tensor = np.zeros((feature_map_size[0], feature_map_size[1], n_boxes, 4))
         # np.tile() 之后 shape 为 (feature_map_size[1], feature_map_size[0], n_boxes)
-        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, self.n_boxes))  # Set cx
-        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, self.n_boxes))  # Set cy
+        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, n_boxes))  # Set cx
+        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, n_boxes))  # Set cy
         boxes_tensor[:, :, :, 2] = wh_list[:, 0]  # Set w
         boxes_tensor[:, :, :, 3] = wh_list[:, 1]  # Set h
 
@@ -708,7 +760,7 @@ class SSDInputEncoder:
         # Tile the anchor boxes for each predictor layer across all batch items.
         batch_boxes = []
         # boxes_list 是一个 list
-        # 每一个元素是一个 np.array, shape 为 (feature_map_height, feature_map_width, self.n_boxes, 4)
+        # 每一个元素是一个 np.array, shape 为 (feature_map_height, feature_map_width, n_boxes, 4)
         # 表示一个 feature_map 上的所有的 anchor_box 的坐标(具体的值取决于 self.coords)
         for boxes in self.boxes_list:
             # Prepend one dimension to `self.boxes_list` to account for the batch size and tile it along.

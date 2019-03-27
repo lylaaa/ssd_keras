@@ -100,3 +100,5 @@ local*
 *.h5
 *.hdf5
 *.jpg
+ssd7_training_log.csv
+ssd300_pascal_07+12_training_log.csv

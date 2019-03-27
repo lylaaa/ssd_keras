@@ -54,10 +54,7 @@ class ConvertColor:
             image = cv2.cvtColor(image, cv2.COLOR_HSV2GRAY)
             if self.keep_3ch:
                 image = np.stack([image] * 3, axis=-1)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class ConvertDataType:
@@ -82,10 +79,7 @@ class ConvertDataType:
             image = np.round(image, decimals=0).astype(np.uint8)
         else:
             image = image.astype(np.float32)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class ConvertTo3Channels:
@@ -105,10 +99,7 @@ class ConvertTo3Channels:
                 image = np.concatenate([image] * 3, axis=-1)
             elif image.shape[2] == 4:
                 image = image[:, :, :3]
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class Hue:
@@ -133,10 +124,7 @@ class Hue:
 
     def __call__(self, image, labels=None):
         image[:, :, 0] = (image[:, :, 0] + self.delta) % 180.0
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomHue:
@@ -164,13 +152,10 @@ class RandomHue:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p <= self.prob:
+        if p < self.prob:
             self.change_hue.delta = np.random.uniform(-self.max_delta, self.max_delta)
             return self.change_hue(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class Saturation:
@@ -194,10 +179,7 @@ class Saturation:
 
     def __call__(self, image, labels=None):
         image[:, :, 1] = np.clip(image[:, :, 1] * self.factor, 0, 255)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomSaturation:
@@ -230,10 +212,7 @@ class RandomSaturation:
         if p < self.prob:
             self.change_saturation.factor = np.random.uniform(self.lower, self.upper)
             return self.change_saturation(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class Brightness:
@@ -258,10 +237,7 @@ class Brightness:
     def __call__(self, image, labels=None):
         # 小于 0 取 0, 大于 255 取 255
         image = np.clip(image + self.delta, 0, 255)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomBrightness:
@@ -295,10 +271,7 @@ class RandomBrightness:
         if p < self.prob:
             self.change_brightness.delta = np.random.uniform(self.lower, self.upper)
             return self.change_brightness(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class Contrast:
@@ -322,10 +295,7 @@ class Contrast:
 
     def __call__(self, image, labels=None):
         image = np.clip(127.5 + self.factor * (image - 127.5), 0, 255)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomContrast:
@@ -358,10 +328,7 @@ class RandomContrast:
         if p < self.prob:
             self.change_contrast.factor = np.random.uniform(self.lower, self.upper)
             return self.change_contrast(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class Gamma:
@@ -385,10 +352,7 @@ class Gamma:
 
     def __call__(self, image, labels=None):
         image = cv2.LUT(image, table)
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomGamma:
@@ -419,10 +383,7 @@ class RandomGamma:
             gamma = np.random.uniform(self.lower, self.upper)
             change_gamma = Gamma(gamma=gamma)
             return change_gamma(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class HistogramEqualization:
@@ -437,10 +398,7 @@ class HistogramEqualization:
 
     def __call__(self, image, labels=None):
         image[:, :, 2] = cv2.equalizeHist(image[:, :, 2])
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomHistogramEqualization:
@@ -462,12 +420,9 @@ class RandomHistogramEqualization:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p >= (1.0 - self.prob):
+        if p < self.prob:
             return self.equalize(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class ChannelSwap:
@@ -485,10 +440,7 @@ class ChannelSwap:
 
     def __call__(self, image, labels=None):
         image = image[:, :, self.order]
-        if labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels
 
 
 class RandomChannelSwap:
@@ -513,11 +465,9 @@ class RandomChannelSwap:
 
     def __call__(self, image, labels=None):
         p = np.random.uniform(0, 1)
-        if p >= (1.0 - self.prob):
-            i = np.random.randint(5)  # There are 6 possible permutations.
+        if p < self.prob:
+            # There are 6 possible permutations.
+            i = np.random.randint(5)
             self.swap_channels.order = self.permutations[i]
             return self.swap_channels(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels

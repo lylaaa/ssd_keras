@@ -55,66 +55,65 @@ def build_model(image_size,
     """
     Build a Keras model with SSD architecture, see references.
 
-    The model consists of convolutional feature layers and a number of convolutional
-    predictor layers that take their input from different feature layers.
+    The model consists of convolutional feature layers and a number of convolutional predictor layers that take their
+    input from different feature layers.
+
     The model is fully convolutional.
 
-    The implementation found here is a smaller version of the original architecture
-    used in the paper (where the base network consists of a modified VGG-16 extended
-    by a few convolutional feature layers), but of course it could easily be changed to
-    an arbitrarily large SSD architecture by following the general design pattern used here.
-    This implementation has 7 convolutional layers and 4 convolutional predictor
-    layers that take their input from layers 4, 5, 6, and 7, respectively.
+    The implementation found here is a smaller version of the original architecture used in the paper (where the base
+    network consists of a modified VGG-16 extended by a few convolutional feature layers), but of course it could easily
+    be changed to an arbitrarily large SSD architecture by following the general design pattern used here.
 
-    Most of the arguments that this function takes are only needed for the anchor
-    box layers. In case you're training the network, the parameters passed here must
-    be the same as the ones used to set up `SSDBoxEncoder`. In case you're loading
-    trained weights, the parameters passed here must be the same as the ones used
-    to produce the trained weights.
+    This implementation has 7 convolutional layers and 4 convolutional predictor layers that take their input from
+    layers 4, 5, 6, and 7, respectively.
 
-    Some of these arguments are explained in more detail in the documentation of the
-    `SSDBoxEncoder` class.
+    Most of the arguments that this function takes are only needed for the anchor box layers.
+    In case you're training the network, the parameters passed here must be the same as the ones used to set up
+    `SSDBoxEncoder`.
+    In case you're loading trained weights, the parameters passed here must be the same as the ones used to produce the
+    trained weights.
 
-    Note: Requires Keras v2.0 or later. Training currently works only with the
-    TensorFlow backend (v1.0 or later).
+    Some of these arguments are explained in more detail in the documentation of the `SSDBoxEncoder` class.
+
+    Note: Requires Keras v2.0 or later. Training currently works only with the TensorFlow backend (v1.0 or later).
 
     Arguments:
         image_size (tuple): The input image size in the format `(height, width, channels)`.
         n_classes (int): The number of positive classes, e.g. 20 for Pascal VOC, 80 for MS COCO.
-        mode (str, optional): One of 'training', 'inference' and 'inference_fast'. In 'training' mode,
-            the model outputs the raw prediction tensor, while in 'inference' and 'inference_fast' modes,
-            the raw predictions are decoded into absolute coordinates and filtered via confidence thresholding,
-            non-maximum suppression, and top-k filtering. The difference between latter two modes is that
-            'inference' follows the exact procedure of the original Caffe implementation, while
-            'inference_fast' uses a faster prediction decoding procedure.
+        mode (str, optional): One of 'training', 'inference' and 'inference_fast'.
+            In 'training' mode, the model outputs the raw prediction tensor, while in 'inference' and 'inference_fast'
+            modes, the raw predictions are decoded into absolute coordinates and filtered via confidence thresholding,
+            non-maximum suppression, and top-k filtering.
+            The difference between latter two modes is that 'inference' follows the exact procedure of the original
+            Caffe implementation, while 'inference_fast' uses a faster prediction decoding procedure.
         l2_regularization (float, optional): The L2-regularization rate. Applies to all convolutional layers.
         min_scale (float, optional): The smallest scaling factor for the size of the anchor boxes as a fraction
             of the shorter side of the input images.
         max_scale (float, optional): The largest scaling factor for the size of the anchor boxes as a fraction
-            of the shorter side of the input images. All scaling factors between the smallest and the
-            largest will be linearly interpolated. Note that the second to last of the linearly interpolated
-            scaling factors will actually be the scaling factor for the last predictor layer, while the last
-            scaling factor is used for the second box for aspect ratio 1 in the last predictor layer
-            if `two_boxes_for_ar1` is `True`.
+            of the shorter side of the input images. All scaling factors between the smallest and the largest will be
+            linearly interpolated.
+            Note that the second to last of the linearly interpolated scaling factors will actually be the scaling
+            factor for the last predictor layer, while the last scaling factor is used for the second box for
+            aspect ratio 1 in the last predictor layer if `two_boxes_for_ar1` is `True`.
         scales (list, optional): A list of floats containing scaling factors per convolutional predictor layer.
             This list must be one element longer than the number of predictor layers. The first `k` elements are the
             scaling factors for the `k` predictor layers, while the last element is used for the second box
             for aspect ratio 1 in the last predictor layer if `two_boxes_for_ar1` is `True`. This additional
             last scaling factor must be passed either way, even if it is not being used. If a list is passed,
             this argument overrides `min_scale` and `max_scale`. All scaling factors must be greater than zero.
-        aspect_ratios_global (list, optional): The list of aspect ratios for which anchor boxes are to be generated.
-            This list is valid for all predictor layers.
-            The original implementation uses more aspect ratios for some predictor layers and fewer for others.
+        aspect_ratios_global (list/tuple, optional): The list/tuple of aspect ratios for which anchor boxes are to be
+            generated. This list is valid for all predictor layers.
+            Note the original implementation uses more aspect ratios for some predictor layers and fewer for others.
             If you want to do that, too, then use the next argument instead.
-        aspect_ratios_per_layer (list, optional): A list containing one aspect ratio list for each predictor layer.
-            This allows you to set the aspect ratios for each predictor layer individually.
+        aspect_ratios_per_layer (list/tuple, optional): A nested list/tuple containing one aspect ratio list/tuple for
+            each predictor layer. This allows you to set the aspect ratios for each predictor layer individually.
             If a list is passed, it overrides `aspect_ratios_global`.
         two_boxes_for_ar1 (bool, optional): Only relevant for aspect ratio lists that contain 1. Will be ignored
             otherwise.
             If `True`, two anchor boxes will be generated for aspect ratio 1.
             The first will be generated using the scaling factor for the respective layer,
             the second one will be generated using geometric mean of said scaling factor and next bigger scaling factor.
-        steps (list, optional): `None` or a list with as many elements as there are predictor layers.
+        steps (list, optional): `None` or a nested tuple/list with as many elements as there are predictor layers.
             The elements can be either ints/floats or tuples of two ints/floats.
             These numbers represent for each predictor layer how many pixels apart the anchor box center points
             should be vertically and horizontally along the spatial grid over the image.
@@ -122,16 +121,16 @@ def build_model(image_size,
             If the list contains tuples of two ints/floats, then they represent `(step_height, step_width)`.
             If no steps are provided, then they will be computed such that the anchor box center points will form an
             equidistant grid within the image dimensions.
-        offsets (list, optional): `None` or a list with as many elements as there are predictor layers.
+        offsets (list, optional): `None` or a nested tuple/list with as many elements as there are predictor layers.
             The elements can be either floats or tuples of two floats.
             These numbers represent for each predictor layer how many pixels from the top and left boarders of the image
             the top-most and left-most anchor box center points should be as a fraction of `steps`.
-            The last bit is important: The offsets are not absolute pixel values, but fractions
-            of the step size specified in the `steps` argument.
+            Note the last bit is important: The offsets are not absolute pixel values, but fractions of the step size
+             specified in the `steps` argument.
             If the list contains floats, then that value will be used for both spatial dimensions.
             If the list contains tuples of two floats, then they represent `(vertical_offset, horizontal_offset)`.
-            If no offsets are provided, then they will default to 0.5 of the step size,
-            which is also the recommended setting.
+            If no offsets are provided, then they will default to 0.5 of the step size, which is also the recommended
+            setting.
         clip_boxes (bool, optional): If `True`, clips the anchor box coordinates to stay within image boundaries.
         # UNCLEAR:
         variances (list, optional): A list of 4 floats >0. The anchor box offset for each coordinate will be divided by
@@ -169,98 +168,158 @@ def build_model(image_size,
             a list containing the spatial dimensions of the predictor layers.
             This isn't strictly necessary since you can always get their sizes easily via the Keras API,
             but it's convenient and less error-prone to get them this way.
-            They are only relevant for training anyway (SSDBoxEncoder needs to know the
-            spatial dimensions of the predictor layers), for inference you don't need them.
+            They are only relevant for training anyway (SSDBoxEncoder needs to know the spatial dimensions of the
+            predictor layers), for inference you don't need them.
 
     Returns:
         model: The Keras SSD model.
-        predictor_sizes (optional): A Numpy array containing the `(height, width)` portion
-            of the output tensor shape for each convolutional predictor layer. During
-            training, the generator function needs this in order to transform
-            the ground truth labels into tensors of identical structure as the
-            output tensors of the model, which is in turn needed for the cost
-            function.
+        predictor_sizes (optional): A Numpy array containing the `(height, width)` portion of the output tensor shape
+            for each convolutional predictor layer. During training, the generator function needs this in order to
+            transform the ground truth labels into tensors of identical structure as the output tensors of the model,
+            which is in turn needed for the cost function.
 
     References:
         https://arxiv.org/abs/1512.02325v5
     """
+
     # The number of predictor conv layers in the network
     n_predictor_layers = 4
-    # Account for the background class.
-    n_classes += 1
     # Make the internal name shorter.
     l2_reg = l2_regularization
-    img_height, img_width, img_channels = image_size[0], image_size[1], image_size[2]
 
     ############################################################################
     # Get a few exceptions out of the way.
     ############################################################################
-
-    if aspect_ratios_global is None and aspect_ratios_per_layer is None:
+    if not (isinstance(image_size, (list, tuple)) and len(image_size) == 3):
         raise ValueError(
-            "`aspect_ratios_global` and `aspect_ratios_per_layer` cannot both be None." 
-            "At least one needs to be specified.")
-    if aspect_ratios_per_layer:
-        if len(aspect_ratios_per_layer) != n_predictor_layers:
-            raise ValueError(
-                "It must be either aspect_ratios_per_layer is None or len(aspect_ratios_per_layer) == {}, "
-                "but len(aspect_ratios_per_layer) == {}.".format(n_predictor_layers, len(aspect_ratios_per_layer)))
+            "`image_size` must be a 3-int list/tuple"
+            "that contains image_height, image_width, image_channels respectively")
+    elif not (isinstance(image_size[0], int) and isinstance(image_size[1], int) and isinstance(image_size[2], int)):
+        raise ValueError(
+            "`image_size` must be a 3-int list/tuple"
+            "that contains image_height, image_width, image_channels respectively")
+    elif np.any(np.array(image_size) <= 0):
+        raise ValueError("All elements of image_size must be greater than zero.")
+    else:
+        img_height, img_width, img_channels = image_size[0], image_size[1], image_size[2]
 
+    if not (isinstance(n_classes, int) and n_classes > 0):
+        raise ValueError('`n_classes` must be a positive int')
+    else:
+        # +1 for background class
+        n_classes = n_classes + 1
+
+    if mode not in ('training', 'inference', 'inference_fast'):
+        raise ValueError(
+            "Unexpected value for `mode`. Supported values are 'training', 'inference' and 'inference_fast'.")
+
+    # scales
     if (min_scale is None or max_scale is None) and scales is None:
         raise ValueError("Either `min_scale` and `max_scale` or `scales` need to be specified.")
-    if scales:
-        if len(scales) != n_predictor_layers + 1:
+    elif scales:
+        if not isinstance(scales, (list, tuple)):
+            raise ValueError("It must be either `scales` is None, a list or a tuple")
+        elif len(scales) != n_predictor_layers + 1:
             raise ValueError("It must be either scales is None or len(scales) == {}, "
                              "but len(scales) == {}.".format(n_predictor_layers + 1, len(scales)))
-    else:
-        # If no explicit list of scaling factors was passed,
-        # compute the list of scaling factors from `min_scale` and `max_scale`
-        scales = np.linspace(min_scale, max_scale, n_predictor_layers + 1)
-
-    if len(variances) != 4:  # We need one variance value for each of the four box coordinates
-        raise ValueError("4 variance values must be pased, but {} values were received.".format(len(variances)))
-    variances = np.array(variances)
-    if np.any(variances <= 0):
-        raise ValueError("All variances must be >0, but the variances given are {}".format(variances))
-
-    if (not (steps is None)) and (len(steps) != n_predictor_layers):
-        raise ValueError("You must provide at least one step value per predictor layer.")
-
-    if (not (offsets is None)) and (len(offsets) != n_predictor_layers):
-        raise ValueError("You must provide at least one offset value per predictor layer.")
-
-    ############################################################################
-    # Compute the anchor box parameters.
-    ############################################################################
-
-    # Set the aspect ratios for each predictor layer. These are only needed for the anchor box layers.
-    if aspect_ratios_per_layer:
-        aspect_ratios = aspect_ratios_per_layer
-    else:
-        aspect_ratios = [aspect_ratios_global] * n_predictor_layers
-
-    # Compute the number of boxes to be predicted per cell for each predictor layer.
-    # We need this so that we know how many channels the predictor layers need to have.
-    if aspect_ratios_per_layer:
-        n_boxes = []
-        for ar in aspect_ratios_per_layer:
-            if (1 in ar) & two_boxes_for_ar1:
-                # +1 for the second box for aspect ratio 1
-                n_boxes.append(len(ar) + 1)
-            else:
-                n_boxes.append(len(ar))
-    else:
-        # If only a global aspect ratio list was passed, then the number of boxes is the same for each predictor layer
-        if (1 in aspect_ratios_global) & two_boxes_for_ar1:
-            n_boxes = len(aspect_ratios_global) + 1
         else:
-            n_boxes = len(aspect_ratios_global)
-        n_boxes = [n_boxes] * n_predictor_layers
+            scales = np.array(scales)
+            if np.any(scales <= 0):
+                raise ValueError(
+                    "All values in `scales` must be greater than 0, but the passed list of scales is {}".format(scales))
+    else:
+        # If no explicit list of scaling factors was passed, we need to
+        # 1. make sure that `min_scale` and `max_scale` are valid values
+        # 2. compute the list of scaling factors from `min_scale` and `max_scale`
+        if not (isinstance(min_scale, float) and isinstance(max_scale, float)):
+            raise ValueError('`min_scale` and `max_scale` must be float')
+        elif not 0 < min_scale <= max_scale:
+            raise ValueError(
+                "It must be 0 < min_scale <= max_scale, but it is min_scale = {} and max_scale = {}".format(
+                    min_scale, max_scale))
+        else:
+            scales = np.linspace(min_scale, max_scale, n_predictor_layers + 1)
 
-    if steps is None:
+    # two_boxes_for_ar1
+    if not (isinstance(two_boxes_for_ar1, bool)):
+        raise ValueError('`two_boxes_for_ar1` must be bool')
+
+    # aspect_ratio
+    if aspect_ratios_per_layer is not None:
+        if not isinstance(aspect_ratios_per_layer, (list, tuple)):
+            raise ValueError("It must be either `aspect_ratios_per_layer` is None, a list or a tuple")
+        elif len(aspect_ratios_per_layer) != n_predictor_layers:
+            raise ValueError(
+                "If `aspect_ratios_per_layer` is a list/tuple, it must meet "
+                "len(aspect_ratios_per_layer) == n_predictor_layers, "
+                "but len(aspect_ratios_per_layer) == {} and n_predictor_layers == {}".format(
+                    len(aspect_ratios_per_layer), n_predictor_layers))
+        for aspect_ratios in aspect_ratios_per_layer:
+            if not (isinstance(aspect_ratios, (list, tuple)) and aspect_ratios):
+                raise ValueError("All aspect ratios must be a list or tuple and not empty")
+            # NOTE 当 aspect_ratios 为 () 或 [], np.any(np.array(aspect_ratios)) <=0 为 False, 所以必须有上面的判断
+            elif np.any(np.array(aspect_ratios) <= 0):
+                raise ValueError("All aspect ratios must be greater than zero.")
+        else:
+            # Compute the number of boxes to be predicted per cell for each predictor layer.
+            # We need this so that we know how many channels the predictor layers need to have.
+            n_boxes = []
+            for aspect_ratios in aspect_ratios_per_layer:
+                if (1 in aspect_ratios) and two_boxes_for_ar1:
+                    # +1 for the second box for aspect ratio 1
+                    n_boxes.append(len(aspect_ratios) + 1)
+                else:
+                    n_boxes.append(len(aspect_ratios))
+            # Set the aspect ratios for each predictor layer. These are only needed for the anchor box layers.
+            aspect_ratios = aspect_ratios_per_layer
+    else:
+        if aspect_ratios_global is None:
+            raise ValueError(
+                "At least one of `aspect_ratios_global` and `aspect_ratios_per_layer` must not be `None`.")
+        elif not (isinstance(aspect_ratios_global, (list, tuple)) and aspect_ratios_global):
+            raise ValueError(
+                "`aspect_ratios_global` must be a list/tuple and not empty when `aspect_ratios_per_layer` is None")
+        # NOTE 当 aspect_ratios_global 为 () 或 [], np.any(np.array(aspect_ratios)) <=0 为 False, 所以必须有上面的判断
+        elif np.any(np.array(aspect_ratios_global) <= 0):
+            raise ValueError("All aspect ratios must be greater than zero.")
+        else:
+            # If aspect ratios are given per layer, we'll use those.
+            aspect_ratios = [aspect_ratios_global] * n_predictor_layers
+            # If only a global aspect ratio list was passed, then the number of boxes is the same for each predictor
+            # layer
+            if (1 in aspect_ratios_global) and two_boxes_for_ar1:
+                n_boxes = len(aspect_ratios_global) + 1
+            else:
+                n_boxes = len(aspect_ratios_global)
+            n_boxes = [n_boxes] * n_predictor_layers
+
+    if steps is not None:
+        if not (isinstance(steps, (list, tuple)) and (len(steps) == n_predictor_layers)):
+            raise ValueError("You must provide at least one step value per predictor layer.")
+    else:
         steps = [None] * n_predictor_layers
-    if offsets is None:
+
+    if offsets is not None:
+        if not (isinstance(offsets, (list, tuple)) and (len(offsets) == n_predictor_layers)):
+            raise ValueError("You must provide at least one offset value per predictor layer.")
+    else:
         offsets = [None] * n_predictor_layers
+
+    if not (isinstance(clip_boxes, bool)):
+        raise ValueError('`clip_boxes` must be bool')
+
+    if not (isinstance(variances, (list, tuple)) and len(variances) == 4):
+        # We need one variance value for each of the four box coordinates
+        raise ValueError("4 variance values must be passed, but {} values were received.".format(len(variances)))
+    else:
+        if np.any(np.array(variances) <= 0):
+            raise ValueError("All variances must be >0, but the variances given are {}".format(variances))
+
+    if coords not in ('minmax', 'centroids', 'corners'):
+        raise ValueError("Unexpected value for `coords`. Supported values are 'minmax', 'corners' and 'centroids'.")
+
+    if not (isinstance(normalize_coords, bool)):
+        raise ValueError('`normalize_coords` must be bool')
 
     ############################################################################
     # Define functions for the Lambda layers below.
@@ -347,9 +406,9 @@ def build_model(image_size,
     # The next part is to add the convolutional predictor layers on top of the base network that we defined above.
     # Note that I use the term "base network" differently than the paper does.
     # To me, the base network is everything that is not convolutional predictor layers or anchor box layers.
-    # In this case we'll have four predictor layers, but of course you could
-    # easily rewrite this into an arbitrarily deep base network and add an arbitrary number of
-    # predictor layers on top of the base network by simply following the pattern shown here.
+    # In this case we'll have four predictor layers, but of course you could easily rewrite this into an arbitrarily
+    # deep base network and add an arbitrary number of predictor layers on top of the base network by simply following
+    # the pattern shown here.
 
     # Build the convolutional predictor layers on top of conv layers 4, 5, 6, and 7.
     # We build two predictor layers on top of each of these layers:
@@ -478,10 +537,10 @@ def build_model(image_size,
     if return_predictor_sizes:
         # The spatial dimensions are the same for the `classes` and `boxes` predictor layers.
         # 就是 feature_map 的 size
-        predictor_sizes = np.array([classes4._keras_shape[1:3],
-                                    classes5._keras_shape[1:3],
-                                    classes6._keras_shape[1:3],
-                                    classes7._keras_shape[1:3]])
+        predictor_sizes = np.array([K.shape(classes4)[1:3],
+                                    K.shape(classes5)[1:3],
+                                    K.shape(classes6)[1:3],
+                                    K.shape(classes7)[1:3]])
         return model, predictor_sizes
     else:
         return model

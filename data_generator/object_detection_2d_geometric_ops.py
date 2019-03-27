@@ -67,20 +67,21 @@ class Resize:
                            dsize=(self.out_width, self.out_height),
                            interpolation=self.interpolation_mode)
         if return_inverter:
+            # Adam
             def inverter(new_labels):
                 old_labels = np.copy(new_labels)
-                old_labels[:, [ymin + 1, ymax + 1]] = np.round(
-                    old_labels[:, [ymin + 1, ymax + 1]] * (img_height / self.out_height), decimals=0)
-                old_labels[:, [xmin + 1, xmax + 1]] = np.round(
-                    old_labels[:, [xmin + 1, xmax + 1]] * (img_width / self.out_width), decimals=0)
+                old_labels[:, [ymin, ymax]] = np.round(
+                    old_labels[:, [ymin, ymax]] * (img_height / self.out_height), decimals=0)
+                old_labels[:, [xmin, xmax]] = np.round(
+                    old_labels[:, [xmin, xmax]] * (img_width / self.out_width), decimals=0)
                 return old_labels
         else:
             inverter = None
         if labels is None:
             if return_inverter:
-                return image, inverter
+                return image, labels, inverter
             else:
-                return image
+                return image, labels
         else:
             labels = np.copy(labels)
             labels[:, [ymin, ymax]] = np.round(labels[:, [ymin, ymax]] * (self.out_height / img_height), decimals=0)
@@ -175,7 +176,7 @@ class Flip:
             # 左右翻转
             image = image[:, ::-1]
             if labels is None:
-                return image
+                return image, labels
             else:
                 labels = np.copy(labels)
                 # Adam
@@ -185,7 +186,7 @@ class Flip:
             # 上下翻转
             image = image[::-1]
             if labels is None:
-                return image
+                return image, labels
             else:
                 labels = np.copy(labels)
                 # Adam
@@ -223,8 +224,6 @@ class RandomFlip:
         if p < self.prob:
             self.flip.labels_format = self.labels_format
             return self.flip(image, labels)
-        elif labels is None:
-            return image
         else:
             return image, labels
 

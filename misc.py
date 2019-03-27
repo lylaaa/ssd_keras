@@ -6,12 +6,13 @@ import numpy as np
 import logging
 import sys
 import random
+from keras.applications import vgg16
 
 logger = logging.getLogger('irf_sh')
 logger.setLevel(logging.DEBUG)  # default log level
-format = logging.Formatter("%(asctime)s %(name)-8s %(levelname)-8s %(lineno)-4d %(message)s")  # output format
+formatter = logging.Formatter("%(asctime)s %(name)-8s %(levelname)-8s %(lineno)-4d %(message)s")  # output format
 sh = logging.StreamHandler(stream=sys.stdout)  # output to standard output
-sh.setFormatter(format)
+sh.setFormatter(formatter)
 logger.addHandler(sh)
 
 
@@ -60,6 +61,59 @@ def split_labels_csv(images_dir):
 
 
 # split_labels_csv('/home/adam/.keras/datasets/udacity_self_driving_car/object-detection-crowdai')
+
+
+def resize_and_split(images_dir, new_images_dir):
+    labels_csv_path = osp.join(images_dir, 'labels_crowdai.csv')
+    df = pd.read_csv(labels_csv_path)
+    class_names = df['Label'].unique().tolist()
+    csv_reader = csv.reader(open(labels_csv_path, 'r'), delimiter=',')
+    # 忽略第一行 header
+    next(csv_reader)
+    # image file name 作为 key, [[class_id,xmin,ymin,xmax,ymax],...] 作为 value
+    annotations = {}
+    for row in csv_reader:
+        xmin = int(round(int(row[0]) / 4))
+        ymin = int(round(int(row[1]) / 4))
+        xmax = int(round(int(row[2]) / 4))
+        ymax = int(round(int(row[3]) / 4))
+        image_filename = row[4]
+        class_name = row[5]
+        # because id=0 reversed for background
+        class_id = class_names.index(class_name) + 1
+        if image_filename not in annotations:
+            annotations[image_filename] = []
+        annotations[image_filename].append([image_filename, xmin, ymin, xmax, ymax, class_id])
+        new_image_path = osp.join(new_images_dir, image_filename)
+        if not osp.exists(new_image_path):
+            image = cv2.imread(osp.join(images_dir, image_filename))
+            image = cv2.resize(image, (480, 300), interpolation=cv2.INTER_LINEAR)
+            cv2.imwrite(new_image_path, image)
+    # 9218
+    num_images = len(annotations)
+    # 6452
+    num_train_images = int(num_images * 0.7)
+    # 2766
+    num_val_images = num_images - num_train_images
+    logger.debug(
+        'num_images={}, num_train_images={}, num_val_image={}'.format(num_images, num_train_images, num_val_images))
+
+    train_csv_obj = open(osp.join(new_images_dir, 'train.csv'), 'w')
+    train_csv_writer = csv.writer(train_csv_obj, delimiter=',')
+    val_csv_obj = open(osp.join(new_images_dir, 'val.csv'), 'w')
+    val_csv_writer = csv.writer(val_csv_obj, delimiter=',')
+    image_filenames = list(annotations.keys())
+    random.shuffle(image_filenames)
+    for image_filename in image_filenames[:num_train_images]:
+        for row in annotations[image_filename]:
+            train_csv_writer.writerow(row)
+    for image_filename in image_filenames[num_train_images:]:
+        for row in annotations[image_filename]:
+            val_csv_writer.writerow(row)
+
+
+# resize_and_split('/home/adam/.keras/datasets/udacity_self_driving_car/-detection-crowdai',
+#                  '/home/adam/.keras/datasets/udacity_self_driving_car/object-detection-crowdai-480-300')
 
 
 def test_flip(image_path):
@@ -133,4 +187,28 @@ def test_rotate(image_path):
     cv2.waitKey(0)
 
 
-test_rotate('/home/adam/.keras/datasets/udacity_self_driving_car/object-detection-crowdai/1479506172970816105.jpg')
+# test_rotate('/home/adam/.keras/datasets/udacity_self_driving_car/object-detection-crowdai/1479506172970816105.jpg')
+
+def count_images(labels_csv_path):
+    csv_reader = csv.reader(open(labels_csv_path, 'r'), delimiter=',')
+    # 忽略第一行 header
+    next(csv_reader)
+    # image file name 作为 key, [[class_id,xmin,ymin,xmax,ymax],...] 作为 value
+    annotations = {}
+    for row in csv_reader:
+        xmin = int(round(int(row[1]) / 4))
+        xmax = int(round(int(row[2]) / 4))
+        ymin = int(round(int(row[3]) / 4))
+        ymax = int(round(int(row[4]) / 4))
+        image_filename = row[0]
+        # because id=0 reversed for background
+        class_id = row[-1]
+        if image_filename not in annotations:
+            annotations[image_filename] = []
+        annotations[image_filename].append([image_filename, xmin, ymin, xmax, ymax, class_id])
+    # 9218
+    num_images = len(annotations)
+    logger.debug('num_images={}'.format(num_images))
+
+
+count_images('/home/adam/.keras/datasets/udacity_self_driving_car/ssd_datasets/labels_val.csv')

@@ -137,16 +137,17 @@ class BoxFilter:
                 If 'half', then one of each of the two horizontal and vertical borders belong to the boxes,
                 but not the other.
         """
-        if not isinstance(overlap_bounds, (list, tuple, BoundGenerator)):
-            raise ValueError("`overlap_bounds` must be either a 2-tuple of scalars or a `BoundGenerator` object.")
-        if isinstance(overlap_bounds, (list, tuple)):
-            # Adam
-            if len(overlap_bounds) != 2:
-                raise ValueError("overlap_bounds` must be a 2-scalar of list or tuple")
-            if overlap_bounds[0] > overlap_bounds[1]:
-                raise ValueError("The lower bound must not be greater than the upper bound.")
-        if overlap_criterion not in {'iou', 'area', 'center_point'}:
-            raise ValueError("`overlap_criterion` must be one of 'iou', 'area' and 'center_point'.")
+        if check_overlap:
+            if not isinstance(overlap_bounds, (list, tuple, BoundGenerator)):
+                raise ValueError("`overlap_bounds` must be either a 2-tuple of scalars or a `BoundGenerator` object.")
+            elif isinstance(overlap_bounds, (list, tuple)):
+                # Adam
+                if len(overlap_bounds) != 2:
+                    raise ValueError("overlap_bounds` must be a 2-scalar of list or tuple")
+                elif overlap_bounds[0] > overlap_bounds[1]:
+                    raise ValueError("The lower bound must not be greater than the upper bound.")
+            if overlap_criterion not in {'iou', 'area', 'center_point'}:
+                raise ValueError("`overlap_criterion` must be one of 'iou', 'area' and 'center_point'.")
         if border_pixels not in {'include', 'exclude', 'half'}:
             raise ValueError("`border_pixels` must be one of 'include', 'exclude' and 'half'.")
 

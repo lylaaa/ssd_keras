@@ -441,7 +441,7 @@ class DataGenerator:
     def parse_xml(self,
                   images_dirs,
                   image_set_filenames,
-                  annotations_dirs=(),
+                  annotations_dirs,
                   classes=('background',
                            'aeroplane', 'bicycle', 'bird', 'boat',
                            'bottle', 'bus', 'car', 'cat',
@@ -458,22 +458,23 @@ class DataGenerator:
         to the code, but in its current form it expects the data format and XML tags of the Pascal VOC datasets.
 
         Arguments:
-            images_dirs (list): A list of strings, where each string is the path of a directory that
+            images_dirs (list/tuple): A list/tuple of strings, where each string is the path of a directory that
                 contains images that are to be part of the dataset. This allows you to aggregate multiple datasets
                 into one (e.g. one directory that contains the images for Pascal VOC 2007, another that contains
                 the images for Pascal VOC 2012, etc.).
-            image_set_filenames (list): A list of strings, where each string is the path of the text file with the image
-                set to be loaded. Must be one file per image directory given. These text files define what images in the
-                respective image directories are to be part of the dataset and simply contains one image ID per line
-                and nothing else.
-            annotations_dirs (list, optional): A list of strings, where each string is the path of a directory that
-                contains the annotations (XML files) that belong to the images in the respective image directories given.
+            image_set_filenames (list/tuple): A list/tuple of strings, where each string is the path of the text file
+                with the image set to be loaded. Must be one file per image directory given. These text files define
+                what images in the respective image directories are to be part of the dataset and simply contains one
+                image ID per line and nothing else.
+            annotations_dirs (list/tuple, optional): A list/tuple of strings, where each string is the path of a
+                directory that contains the annotations (XML files) that belong to the images in the respective image
+                directories given.
                 The directories must contain one XML file per image and the name of an XML file must be the image ID
                 of the image it belongs to. The content of the XML files must be in the Pascal VOC format.
-            classes (list, optional): A list containing the names of the object classes as found in the
+            classes (list/tuple, optional): A list/tuple containing the names of the object classes as found in the
                 `name` XML tags. Must include the class `background` as the first list item.
                 The order of this list defines the class IDs.
-            include_classes (list, optional): Either 'all' or a list of integers containing the class IDs that
+            include_classes ('all'/list, optional): Either 'all' or a list of integers containing the class IDs that
                 are to be included in the dataset.
                 If 'all', all ground truth boxes will be included in the dataset.
             exclude_truncated (bool, optional): If `True`, excludes boxes that are labeled as 'truncated'.
@@ -505,7 +506,7 @@ class DataGenerator:
         for images_dir, image_set_filename, annotations_dir in zip(images_dirs, image_set_filenames, annotations_dirs):
             # Read the image set file that so that we know all the IDs of all the images to be included in the dataset.
             with open(image_set_filename) as f:
-                # Note: These are strings, not integers.
+                # Note: These are strings, not integers. image 的文件名
                 image_ids = [line.strip() for line in f]
                 self.image_ids += image_ids
 
@@ -574,7 +575,6 @@ class DataGenerator:
                             eval_neutr.append(True)
                         else:
                             eval_neutr.append(False)
-                    # TODO: 确认要不要转成 np.array
                     self.labels.append(boxes)
                     self.eval_neutral.append(eval_neutr)
 
@@ -750,13 +750,13 @@ class DataGenerator:
                             verbose=True):
         """
         Converts the currently loaded dataset into a HDF5 file.
-        This HDF5 file contains all images as uncompressed arrays in a contiguous block of memory, which
-        allows for them to be loaded faster.
+        This HDF5 file contains all images as uncompressed arrays in a contiguous block of disk,
+        which allows for them to be loaded faster.
         Such an uncompressed dataset, however, may take up considerably more space on your hard drive than
         the sum of the source images in a compressed format such as JPG or PNG.
 
-        It is recommended that you always convert the dataset into an HDF5 dataset if you
-        have enough hard drive space since loading from an HDF5 dataset accelerates the data generation noticeably.
+        It is recommended that you always convert the dataset into an HDF5 dataset if you have enough hard drive space
+        since loading from an HDF5 dataset accelerates the data generation noticeably.
 
         Note that you must load a dataset (e.g. via one of the parser methods) before creating an HDF5 dataset from it.
 
@@ -765,13 +765,12 @@ class DataGenerator:
         Arguments:
             file_path (str, optional): The full file path under which to store the HDF5 dataset.
                 You can load this output file via the `DataGenerator` constructor in the future.
-            resize (tuple, optional): `False` or a 2-tuple `(height, width)` that represents the
-                target size for the images. All images in the dataset will be resized to this
-                target size before they will be written to the HDF5 file. If `False`, no resizing
-                will be performed.
-            variable_image_size (bool, optional): The only purpose of this argument is that its
-                value will be stored in the HDF5 dataset in order to be able to quickly find out
-                whether the images in the dataset all have the same size or not.
+            resize (tuple, optional): `False` or a 2-tuple `(height, width)` that represents the target size for the
+                images. All images in the dataset will be resized to this target size before they will be written to the
+                HDF5 file. If `False`, no resizing will be performed.
+            variable_image_size (bool, optional): The only purpose of this argument is that its value will be stored in
+                the HDF5 dataset in order to be able to quickly find out whether the images in the dataset all have the
+                same size or not.
             verbose (bool, optional): Whether or not print out the progress of the dataset creation.
 
         Returns:
@@ -783,8 +782,7 @@ class DataGenerator:
         hdf5_dataset = h5py.File(file_path, 'w')
 
         # Create a few attributes that tell us what this dataset contains.
-        # The dataset will obviously always contain images, but maybe it will
-        # also contain labels, image IDs, etc.
+        # The dataset will obviously always contain images, but maybe it will also contain labels, image IDs, etc.
         hdf5_dataset.attrs.create(name='has_labels', data=False, shape=None, dtype=np.bool_)
         hdf5_dataset.attrs.create(name='has_image_ids', data=False, shape=None, dtype=np.bool_)
         hdf5_dataset.attrs.create(name='has_eval_neutral', data=False, shape=None, dtype=np.bool_)
@@ -799,6 +797,7 @@ class DataGenerator:
         # This allows us, among other things, to store images of variable size.
         hdf5_images = hdf5_dataset.create_dataset(name='images',
                                                   shape=(dataset_size,),
+                                                  # max_shape 表示 dataset 是可以伸缩的
                                                   maxshape=None,
                                                   dtype=h5py.special_dtype(vlen=np.uint8))
 
@@ -815,16 +814,18 @@ class DataGenerator:
                                                       shape=(dataset_size,),
                                                       maxshape=None,
                                                       dtype=h5py.special_dtype(vlen=np.int32))
-
             # Create the dataset that will hold the dimensions of the labels arrays for
             # each image so that we can restore the labels from the flattened arrays later.
             hdf5_label_shapes = hdf5_dataset.create_dataset(name='label_shapes',
                                                             shape=(dataset_size, 2),
                                                             maxshape=(None, 2),
                                                             dtype=np.int32)
-
             hdf5_dataset.attrs.modify(name='has_labels', value=True)
+        else:
+            hdf5_labels = None
+            hdf5_label_shapes = None
 
+        # image_id 是 image_filename 不包含后缀名的那部分
         if self.image_ids is not None:
             hdf5_image_ids = hdf5_dataset.create_dataset(name='image_ids',
                                                          shape=(dataset_size,),
@@ -832,6 +833,8 @@ class DataGenerator:
                                                          dtype=h5py.special_dtype(vlen=str))
 
             hdf5_dataset.attrs.modify(name='has_image_ids', value=True)
+        else:
+            hdf5_image_ids = None
 
         if self.eval_neutral is not None:
             # Create the dataset in which the labels will be stored as flattened arrays.
@@ -841,6 +844,8 @@ class DataGenerator:
                                                             dtype=h5py.special_dtype(vlen=np.bool_))
 
             hdf5_dataset.attrs.modify(name='has_eval_neutral', value=True)
+        else:
+            hdf5_eval_neutral = None
 
         if verbose:
             tr = trange(dataset_size, desc='Creating HDF5 dataset', file=sys.stdout)
