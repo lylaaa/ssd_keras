@@ -190,7 +190,7 @@ def decode_detections(y_pred,
             , or 'half'.
             If 'include', the border pixels belong to the boxes.
             If 'exclude', the border pixels do not belong to the boxes.
-            If 'half', then one of each of the two horizontal and vertical borders belong to the boxex, but not the
+            If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
             other.
 
     Returns:
@@ -284,7 +284,7 @@ def decode_detections(y_pred,
                                      coords='corners',
                                      border_pixels=border_pixels)
                 # Expand the last dimension by one element to have room for the class ID.
-                # This is now an arrray of shape `[n_boxes, 6]`
+                # This is now an array of shape `[n_boxes, 6]`
                 maxima_output = np.zeros((maxima.shape[0], maxima.shape[1] + 1))
                 # Write the class ID to the first column
                 maxima_output[:, 0] = class_id

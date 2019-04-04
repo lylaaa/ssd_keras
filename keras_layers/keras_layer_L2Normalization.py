@@ -68,4 +68,5 @@ class L2Normalization(Layer):
             'gamma_init': self.gamma_init
         }
         base_config = super(L2Normalization, self).get_config()
-        return base_config.update(config)
+        base_config.update(config)
+        return base_config

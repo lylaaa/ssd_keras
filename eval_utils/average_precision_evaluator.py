@@ -1,4 +1,4 @@
-'''
+"""
 An evaluator to compute the Pascal VOC-style mean average precision (both the pre-2010
 and post-2010 algorithm versions) of a given Keras SSD model on a given dataset.
 
@@ -15,7 +15,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-'''
+"""
 
 from __future__ import division
 import numpy as np
@@ -33,40 +33,41 @@ from data_generator.object_detection_2d_misc_utils import apply_inverse_transfor
 
 from bounding_box_utils.bounding_box_utils import iou
 
+
 class Evaluator:
-    '''
+    """
     Computes the mean average precision of the given Keras SSD model on the given dataset.
 
-    Can compute the Pascal-VOC-style average precision in both the pre-2010 (k-point sampling)
-    and post-2010 (integration) algorithm versions.
+    Can compute the Pascal-VOC-style average precision in both the pre-2010 (k-point sampling) and post-2010
+    (integration) algorithm versions.
 
     Optionally also returns the average precisions, precisions, and recalls.
 
-    The algorithm is identical to the official Pascal VOC pre-2010 detection evaluation algorithm
-    in its default settings, but can be cusomized in a number of ways.
-    '''
+    The algorithm is identical to the official Pascal VOC pre-2010 detection evaluation algorithm in its default
+    settings, but can be customized in a number of ways.
+    """
 
     def __init__(self,
                  model,
                  n_classes,
                  data_generator,
                  model_mode='inference',
-                 pred_format={'class_id': 0, 'conf': 1, 'xmin': 2, 'ymin': 3, 'xmax': 4, 'ymax': 5},
-                 gt_format={'class_id': 0, 'xmin': 1, 'ymin': 2, 'xmax': 3, 'ymax': 4}):
-        '''
+                 pred_format=('class_id', 'conf', 'xmin', 'ymin', 'xmax', 'ymax'),
+                 gt_format=('class_id', 'xmin', 'ymin', 'xmax', 'ymax')):
+        """
         Arguments:
             model (Keras model): A Keras SSD model object.
             n_classes (int): The number of positive classes, e.g. 20 for Pascal VOC, 80 for MS COCO.
             data_generator (DataGenerator): A `DataGenerator` object with the evaluation dataset.
-            model_mode (str, optional): The mode in which the model was created, i.e. 'training', 'inference' or 'inference_fast'.
-                This is needed in order to know whether the model output is already decoded or still needs to be decoded. Refer to
-                the model documentation for the meaning of the individual modes.
-            pred_format (dict, optional): A dictionary that defines which index in the last axis of the model's decoded predictions
-                contains which bounding box coordinate. The dictionary must map the keywords 'class_id', 'conf' (for the confidence),
-                'xmin', 'ymin', 'xmax', and 'ymax' to their respective indices within last axis.
-            gt_format (list, optional): A dictionary that defines which index of a ground truth bounding box contains which of the five
-                items class ID, xmin, ymin, xmax, ymax. The expected strings are 'xmin', 'ymin', 'xmax', 'ymax', 'class_id'.
-        '''
+            model_mode (str, optional): The mode in which the model was created, i.e. 'training', 'inference' or
+                'inference_fast'. This is needed in order to know whether the model output is already decoded or still
+                needs to be decoded. Refer to the model documentation for the meaning of the individual modes.
+            pred_format (list/tuple, optional): A list/tuple that defines what the model's decoded predictions contains.
+                The list/tuple must at least contains the keywords 'class_id', 'conf' (for the confidence), 'xmin',
+                'ymin', 'xmax', and 'ymax'.
+            gt_format (list/tuple, optional): A list/tuple that defines what the generated labels contains. The
+                list/tuple must at least contains 'class_id', 'xmin', 'ymin', 'xmax', 'ymax'.
+        """
 
         if not isinstance(data_generator, DataGenerator):
             warnings.warn("`data_generator` is not a `DataGenerator` object, which will cause undefined behavior.")
@@ -86,8 +87,12 @@ class Evaluator:
         self.false_positives = None
         self.cumulative_true_positives = None
         self.cumulative_false_positives = None
-        self.cumulative_precisions = None # "Cumulative" means that the i-th element in each list represents the precision for the first i highest condidence predictions for that class.
-        self.cumulative_recalls = None # "Cumulative" means that the i-th element in each list represents the recall for the first i highest condidence predictions for that class.
+        # "Cumulative" means that the i-th element in each list represents the precision for the first i highest
+        # confidence predictions for that class.
+        self.cumulative_precisions = None
+        # "Cumulative" means that the i-th element in each list represents the recall for the first i highest confidence
+        # predictions for that class.
+        self.cumulative_recalls = None
         self.average_precisions = None
         self.mean_average_precision = None
 
@@ -112,75 +117,91 @@ class Evaluator:
                  decoding_top_k=200,
                  decoding_pred_coords='centroids',
                  decoding_normalize_coords=True):
-        '''
+        """
         Computes the mean average precision of the given Keras SSD model on the given dataset.
 
         Optionally also returns the averages precisions, precisions, and recalls.
 
-        All the individual steps of the overall evaluation algorithm can also be called separately
-        (check out the other methods of this class), but this runs the overall algorithm all at once.
+        All the individual steps of the overall evaluation algorithm can also be called separately (check out the other
+        methods of this class), but this runs the overall algorithm all at once.
 
         Arguments:
             img_height (int): The input image height for the model.
             img_width (int): The input image width for the model.
             batch_size (int): The batch size for the evaluation.
-            data_generator_mode (str, optional): Either of 'resize' and 'pad'. If 'resize', the input images will
-                be resized (i.e. warped) to `(img_height, img_width)`. This mode does not preserve the aspect ratios of the images.
-                If 'pad', the input images will be first padded so that they have the aspect ratio defined by `img_height`
-                and `img_width` and then resized to `(img_height, img_width)`. This mode preserves the aspect ratios of the images.
+            data_generator_mode (str, optional): Either of 'resize' and 'pad'.
+                If 'resize', the input images will be resized (i.e. warped) to `(img_height, img_width)`. This mode does
+                not preserve the aspect ratios of the images.
+                If 'pad', the input images will be first padded so that they have the aspect ratio defined by
+                `img_height` and `img_width` and then resized to `(img_height, img_width)`. This mode preserves the
+                aspect ratios of the images.
             round_confidences (int, optional): `False` or an integer that is the number of decimals that the prediction
                 confidences will be rounded to. If `False`, the confidences will not be rounded.
-            matching_iou_threshold (float, optional): A prediction will be considered a true positive if it has a Jaccard overlap
-                of at least `matching_iou_threshold` with any ground truth bounding box of the same class.
-            border_pixels (str, optional): How to treat the border pixels of the bounding boxes.
-                Can be 'include', 'exclude', or 'half'. If 'include', the border pixels belong
-                to the boxes. If 'exclude', the border pixels do not belong to the boxes.
-                If 'half', then one of each of the two horizontal and vertical borders belong
-                to the boxex, but not the other.
-            sorting_algorithm (str, optional): Which sorting algorithm the matching algorithm should use. This argument accepts
-                any valid sorting algorithm for Numpy's `argsort()` function. You will usually want to choose between 'quicksort'
-                (fastest and most memory efficient, but not stable) and 'mergesort' (slight slower and less memory efficient, but stable).
-                The official Matlab evaluation algorithm uses a stable sorting algorithm, so this algorithm is only guaranteed
-                to behave identically if you choose 'mergesort' as the sorting algorithm, but it will almost always behave identically
-                even if you choose 'quicksort' (but no guarantees).
-            average_precision_mode (str, optional): Can be either 'sample' or 'integrate'. In the case of 'sample', the average precision
-                will be computed according to the Pascal VOC formula that was used up until VOC 2009, where the precision will be sampled
-                for `num_recall_points` recall values. In the case of 'integrate', the average precision will be computed according to the
-                Pascal VOC formula that was used from VOC 2010 onward, where the average precision will be computed by numerically integrating
-                over the whole preciscion-recall curve instead of sampling individual points from it. 'integrate' mode is basically just
-                the limit case of 'sample' mode as the number of sample points increases.
-            num_recall_points (int, optional): The number of points to sample from the precision-recall-curve to compute the average
-                precisions. In other words, this is the number of equidistant recall values for which the resulting precision will be
-                computed. 11 points is the value used in the official Pascal VOC 2007 detection evaluation algorithm.
-            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a ground truth
-                bounding box is supposed to either count or be neutral for the evaluation, this argument decides what to do with these
-                annotations. If `False`, even boxes that are annotated as neutral will be counted into the evaluation. If `True`,
-                neutral boxes will be ignored for the evaluation. An example for evaluation-neutrality are the ground truth boxes
-                annotated as "difficult" in the Pascal VOC datasets, which are usually treated as neutral for the evaluation.
-            return_precisions (bool, optional): If `True`, returns a nested list containing the cumulative precisions for each class.
-            return_recalls (bool, optional): If `True`, returns a nested list containing the cumulative recalls for each class.
-            return_average_precisions (bool, optional): If `True`, returns a list containing the average precision for each class.
+            matching_iou_threshold (float, optional): A prediction will be considered a true positive if it has a
+                Jaccard overlap of at least `matching_iou_threshold` with any ground truth bounding box of the same
+                class.
+            border_pixels (str, optional): How to treat the border pixels of the bounding boxes. Can be 'include',
+                'exclude', or 'half'.
+                If 'include', the border pixels belong to the boxes.
+                If 'exclude', the border pixels do not belong to the boxes.
+                If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
+                other.
+            sorting_algorithm (str, optional): Which sorting algorithm the matching algorithm should use. This argument
+                accepts any valid sorting algorithm for Numpy's `argsort()` function. You will usually want to choose
+                between 'quicksort' (fastest and most memory efficient, but not stable) and 'mergesort' (slight slower
+                and less memory efficient, but stable).
+                The official Matlab evaluation algorithm uses a stable sorting algorithm, so this algorithm is only
+                guaranteed to behave identically if you choose 'mergesort' as the sorting algorithm, but it will almost
+                always behave identically even if you choose 'quicksort' (but no guarantees).
+            average_precision_mode (str, optional): Can be either 'sample' or 'integrate'.
+                In the case of 'sample', the average precision will be computed according to the Pascal VOC formula that
+                was used up until VOC 2009, where the precision will be sampled for `num_recall_points` recall values.
+                In the case of 'integrate', the average precision will be computed according to the Pascal VOC formula
+                that was used from VOC 2010 onward, where the average precision will be computed by numerically
+                integrating over the whole precision-recall curve instead of sampling individual points from it.
+                'integrate' mode is basically just the limit case of 'sample' mode as the number of sample points
+                increases.
+            num_recall_points (int, optional): The number of points to sample from the precision-recall-curve to compute
+                the average precisions. In other words, this is the number of equidistant recall values for which the
+                resulting precision will be computed. 11 points is the value used in the official Pascal VOC 2007
+                detection evaluation algorithm.
+            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a
+                ground truth bounding box is supposed to either count or be neutral for the evaluation, this argument
+                decides what to do with these annotations.
+                If `False`, even boxes that are annotated as neutral will be counted into the evaluation.
+                If `True`, neutral boxes will be ignored for the evaluation.
+                An example for evaluation-neutrality are the ground truth boxes annotated as "difficult" in the Pascal
+                VOC datasets, which are usually treated as neutral for the evaluation.
+            return_precisions (bool, optional): If `True`, returns a nested list containing the cumulative precisions
+                for each class.
+            return_recalls (bool, optional): If `True`, returns a nested list containing the cumulative recalls for each
+                class.
+            return_average_precisions (bool, optional): If `True`, returns a list containing the average precision for
+                each class.
             verbose (bool, optional): If `True`, will print out the progress during runtime.
             decoding_confidence_thresh (float, optional): Only relevant if the model is in 'training' mode.
-                A float in [0,1), the minimum classification confidence in a specific positive class in order to be considered
-                for the non-maximum suppression stage for the respective class. A lower value will result in a larger part of the
-                selection process being done by the non-maximum suppression stage, while a larger value will result in a larger
-                part of the selection process happening in the confidence thresholding stage.
-            decoding_iou_threshold (float, optional): Only relevant if the model is in 'training' mode. A float in [0,1].
-                All boxes with a Jaccard similarity of greater than `iou_threshold` with a locally maximal box will be removed
-                from the set of predictions for a given class, where 'maximal' refers to the box score.
-            decoding_top_k (int, optional): Only relevant if the model is in 'training' mode. The number of highest scoring
-                predictions to be kept for each batch item after the non-maximum suppression stage.
-            decoding_input_coords (str, optional): Only relevant if the model is in 'training' mode. The box coordinate format
-                that the model outputs. Can be either 'centroids' for the format `(cx, cy, w, h)` (box center coordinates, width, and height),
-                'minmax' for the format `(xmin, xmax, ymin, ymax)`, or 'corners' for the format `(xmin, ymin, xmax, ymax)`.
-            decoding_normalize_coords (bool, optional): Only relevant if the model is in 'training' mode. Set to `True` if the model
-                outputs relative coordinates. Do not set this to `True` if the model already outputs absolute coordinates,
-                as that would result in incorrect coordinates.
+                A float in [0,1), the minimum classification confidence in a specific positive class in order to be
+                considered for the non-maximum suppression stage for the respective class. A lower value will result in
+                a larger part of the selection process being done by the non-maximum suppression stage, while a larger
+                value will result in a larger part of the selection process happening in the confidence thresholding
+                stage.
+            decoding_iou_threshold (float, optional): Only relevant if the model is in 'training' mode.
+                A float in [0,1]. All boxes with a Jaccard similarity of greater than `iou_threshold` with a locally
+                maximal box will be removed from the set of predictions for a given class, where 'maximal' refers to the
+                box score.
+            decoding_top_k (int, optional): Only relevant if the model is in 'training' mode. The number of highest
+                scoring predictions to be kept for each batch item after the non-maximum suppression stage.
+            decoding_pred_coords (str, optional): Only relevant if the model is in 'training' mode. The box coordinate
+                format that the model outputs. Can be either 'centroids' for the format `(cx, cy, w, h)` (box center
+                coordinates, width, and height), 'minmax' for the format `(xmin, xmax, ymin, ymax)`, or 'corners' for
+                the format `(xmin, ymin, xmax, ymax)`.
+            decoding_normalize_coords (bool, optional): Only relevant if the model is in 'training' mode. Set to `True`
+                if the model outputs relative coordinates. Do not set this to `True` if the model already outputs
+                absolute coordinates, as that would result in incorrect coordinates.
 
         Returns:
             A float, the mean average precision, plus any optional returns specified in the arguments.
-        '''
+        """
 
         #############################################################################################
         # Predict on the entire dataset.
@@ -269,33 +290,39 @@ class Evaluator:
                            round_confidences=False,
                            verbose=True,
                            ret=False):
-        '''
+        """
         Runs predictions for the given model over the entire dataset given by `data_generator`.
 
         Arguments:
             img_height (int): The input image height for the model.
             img_width (int): The input image width for the model.
             batch_size (int): The batch size for the evaluation.
-            data_generator_mode (str, optional): Either of 'resize' and 'pad'. If 'resize', the input images will
-                be resized (i.e. warped) to `(img_height, img_width)`. This mode does not preserve the aspect ratios of the images.
-                If 'pad', the input images will be first padded so that they have the aspect ratio defined by `img_height`
-                and `img_width` and then resized to `(img_height, img_width)`. This mode preserves the aspect ratios of the images.
+            data_generator_mode (str, optional): Either of 'resize' and 'pad'.
+                If 'resize', the input images will be resized (i.e. warped) to `(img_height, img_width)`. This mode does
+                not preserve the aspect ratios of the images.
+                If 'pad', the input images will be first padded so that they have the aspect ratio defined by
+                `img_height` and `img_width` and then resized to `(img_height, img_width)`. This mode preserves the
+                aspect ratios of the images.
             decoding_confidence_thresh (float, optional): Only relevant if the model is in 'training' mode.
-                A float in [0,1), the minimum classification confidence in a specific positive class in order to be considered
-                for the non-maximum suppression stage for the respective class. A lower value will result in a larger part of the
-                selection process being done by the non-maximum suppression stage, while a larger value will result in a larger
-                part of the selection process happening in the confidence thresholding stage.
-            decoding_iou_threshold (float, optional): Only relevant if the model is in 'training' mode. A float in [0,1].
-                All boxes with a Jaccard similarity of greater than `iou_threshold` with a locally maximal box will be removed
-                from the set of predictions for a given class, where 'maximal' refers to the box score.
-            decoding_top_k (int, optional): Only relevant if the model is in 'training' mode. The number of highest scoring
-                predictions to be kept for each batch item after the non-maximum suppression stage.
-            decoding_input_coords (str, optional): Only relevant if the model is in 'training' mode. The box coordinate format
-                that the model outputs. Can be either 'centroids' for the format `(cx, cy, w, h)` (box center coordinates, width, and height),
-                'minmax' for the format `(xmin, xmax, ymin, ymax)`, or 'corners' for the format `(xmin, ymin, xmax, ymax)`.
-            decoding_normalize_coords (bool, optional): Only relevant if the model is in 'training' mode. Set to `True` if the model
-                outputs relative coordinates. Do not set this to `True` if the model already outputs absolute coordinates,
-                as that would result in incorrect coordinates.
+                A float in [0,1), the minimum classification confidence in a specific positive class in order to be
+                considered for the non-maximum suppression stage for the respective class. A lower value will result in
+                a larger part of the selection process being done by the non-maximum suppression stage, while a larger
+                value will result in a larger part of the selection process happening in the confidence thresholding
+                stage.
+            decoding_iou_threshold (float, optional): Only relevant if the model is in 'training' mode.
+                A float in [0,1]. All boxes with a Jaccard similarity of greater than `iou_threshold` with a locally
+                maximal box will be removed from the set of predictions for a given class, where 'maximal' refers to
+                the box score.
+            decoding_top_k (int, optional): Only relevant if the model is in 'training' mode. The number of highest
+                scoring predictions to be kept for each batch item after the non-maximum suppression stage.
+            decoding_pred_coords (str, optional): Only relevant if the model is in 'training' mode. The box coordinate
+                format that the model outputs. Can be either 'centroids' for the format `(cx, cy, w, h)` (box center
+                coordinates, width, and height), 'minmax' for the format `(xmin, xmax, ymin, ymax)`, or 'corners' for
+                the format `(xmin, ymin, xmax, ymax)`.
+            decoding_normalize_coords (bool, optional): Only relevant if the model is in 'training' mode. Set to `True`
+                if the model outputs relative coordinates. Do not set this to `True` if the model already outputs
+                absolute coordinates, as that would result in incorrect coordinates.
+            decoding_border_pixels (str, optinal): Only relevant if the model is in 'training' mode.
             round_confidences (int, optional): `False` or an integer that is the number of decimals that the prediction
                 confidences will be rounded to. If `False`, the confidences will not be rounded.
             verbose (bool, optional): If `True`, will print out the progress during runtime.
@@ -303,21 +330,21 @@ class Evaluator:
 
         Returns:
             None by default. Optionally, a nested list containing the predictions for each class.
-        '''
+        """
 
-        class_id_pred = self.pred_format['class_id']
-        conf_pred     = self.pred_format['conf']
-        xmin_pred     = self.pred_format['xmin']
-        ymin_pred     = self.pred_format['ymin']
-        xmax_pred     = self.pred_format['xmax']
-        ymax_pred     = self.pred_format['ymax']
+        class_id_pred = self.pred_format.index('class_id')
+        conf_pred = self.pred_format.index('conf')
+        xmin_pred = self.pred_format.index('xmin')
+        ymin_pred = self.pred_format.index('ymin')
+        xmax_pred = self.pred_format.index('xmax')
+        ymax_pred = self.pred_format.index('ymax')
 
         #############################################################################################
         # Configure the data generator for the evaluation.
         #############################################################################################
 
         convert_to_3_channels = ConvertTo3Channels()
-        resize = Resize(height=img_height,width=img_width, labels_format=self.gt_format)
+        resize = Resize(height=img_height, width=img_width, labels_format=self.gt_format)
         if data_generator_mode == 'resize':
             transformations = [convert_to_3_channels,
                                resize]
@@ -327,7 +354,8 @@ class Evaluator:
                                random_pad,
                                resize]
         else:
-            raise ValueError("`data_generator_mode` can be either of 'resize' or 'pad', but received '{}'.".format(data_generator_mode))
+            raise ValueError("`data_generator_mode` can be either of 'resize' or 'pad', but received '{}'."
+                             .format(data_generator_mode))
 
         # Set the generator parameters.
         generator = self.data_generator.generate(batch_size=batch_size,
@@ -336,15 +364,14 @@ class Evaluator:
                                                  label_encoder=None,
                                                  returns={'processed_images',
                                                           'image_ids',
-                                                          'evaluation-neutral',
+                                                          'evaluation_neutral',
                                                           'inverse_transform',
                                                           'original_labels'},
                                                  keep_images_without_gt=True,
                                                  degenerate_box_handling='remove')
 
         # If we don't have any real image IDs, generate pseudo-image IDs.
-        # This is just to make the evaluator compatible both with datasets that do and don't
-        # have image IDs.
+        # This is just to make the evaluator compatible both with datasets that do and don't have image IDs.
         if self.data_generator.image_ids is None:
             self.data_generator.image_ids = list(range(self.data_generator.get_dataset_size()))
 
@@ -354,10 +381,6 @@ class Evaluator:
 
         # We have to generate a separate results list for each class.
         results = [list() for _ in range(self.n_classes + 1)]
-
-        # Create a dictionary that maps image IDs to ground truth annotations.
-        # We'll need it below.
-        image_ids_to_labels = {}
 
         # Compute the number of batches to iterate over the entire dataset.
         n_images = self.data_generator.get_dataset_size()
@@ -373,9 +396,9 @@ class Evaluator:
         # Loop over all batches.
         for j in tr:
             # Generate batch.
-            batch_X, batch_image_ids, batch_eval_neutral, batch_inverse_transforms, batch_orig_labels = next(generator)
+            batch_x, batch_image_ids, batch_eval_neutral, batch_inverse_transforms, batch_orig_labels = next(generator)
             # Predict.
-            y_pred = self.model.predict(batch_X)
+            y_pred = self.model.predict(batch_x)
             # If the model was created in 'training' mode, the raw predictions need to
             # be decoded and filtered, otherwise that's already taken care of.
             if self.model_mode == 'training':
@@ -391,18 +414,17 @@ class Evaluator:
                                            border_pixels=decoding_border_pixels)
             else:
                 # Filter out the all-zeros dummy elements of `y_pred`.
+                # UNCLEAR: 为什么要这么做? 之前并没有填充啊
                 y_pred_filtered = []
                 for i in range(len(y_pred)):
-                    y_pred_filtered.append(y_pred[i][y_pred[i,:,0] != 0])
+                    y_pred_filtered.append(y_pred[i][y_pred[i, :, 0] != 0])
                 y_pred = y_pred_filtered
             # Convert the predicted box coordinates for the original images.
             y_pred = apply_inverse_transforms(y_pred, batch_inverse_transforms)
 
             # Iterate over all batch items.
             for k, batch_item in enumerate(y_pred):
-
                 image_id = batch_image_ids[k]
-
                 for box in batch_item:
                     class_id = int(box[class_id_pred])
                     # Round the box coordinates to reduce the required memory.
@@ -427,33 +449,33 @@ class Evaluator:
                                  classes=None,
                                  out_file_prefix='comp3_det_test_',
                                  verbose=True):
-        '''
+        """
         Writes the predictions for all classes to separate text files according to the Pascal VOC results format.
 
         Arguments:
-            classes (list, optional): `None` or a list of strings containing the class names of all classes in the dataset,
-                including some arbitrary name for the background class. This list will be used to name the output text files.
-                The ordering of the names in the list represents the ordering of the classes as they are predicted by the model,
-                i.e. the element with index 3 in this list should correspond to the class with class ID 3 in the model's predictions.
+            classes (list, optional): `None` or a list of strings containing the class names of all classes in the
+                dataset, including some arbitrary name for the background class. This list will be used to name the
+                output text files. The ordering of the names in the list represents the ordering of the classes as they
+                are predicted by the model, i.e. the element with index 3 in this list should correspond to the class
+                with class ID 3 in the model's predictions.
                 If `None`, the output text files will be named by their class IDs.
-            out_file_prefix (str, optional): A prefix for the output text file names. The suffix to each output text file name will
-                be the respective class name followed by the `.txt` file extension. This string is also how you specify the directory
-                in which the results are to be saved.
+            out_file_prefix (str, optional): A prefix for the output text file names. The suffix to each output text
+                file name will be the respective class name followed by the `.txt` file extension. This string is also
+                how you specify the directory in which the results are to be saved.
             verbose (bool, optional): If `True`, will print out the progress during runtime.
 
         Returns:
             None.
-        '''
+        """
 
         if self.prediction_results is None:
-            raise ValueError("There are no prediction results. You must run `predict_on_dataset()` before calling this method.")
+            raise ValueError(
+                "There are no prediction results. You must run `predict_on_dataset()` before calling this method.")
 
         # We generate a separate results file for each class.
         for class_id in range(1, self.n_classes + 1):
-
             if verbose:
                 print("Writing results file for class {}/{}.".format(class_id, self.n_classes))
-
             if classes is None:
                 class_suffix = '{:04d}'.format(class_id)
             else:
@@ -462,7 +484,6 @@ class Evaluator:
             results_file = open('{}{}.txt'.format(out_file_prefix, class_suffix), 'w')
 
             for prediction in self.prediction_results[class_id]:
-
                 prediction_list = list(prediction)
                 prediction_list[0] = '{:06d}'.format(int(prediction_list[0]))
                 prediction_list[1] = round(prediction_list[1], 4)
@@ -478,29 +499,30 @@ class Evaluator:
                              ignore_neutral_boxes=True,
                              verbose=True,
                              ret=False):
-        '''
+        """
         Counts the number of ground truth boxes for each class across the dataset.
 
         Arguments:
-            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a ground truth
-                bounding box is supposed to either count or be neutral for the evaluation, this argument decides what to do with these
-                annotations. If `True`, only non-neutral ground truth boxes will be counted, otherwise all ground truth boxes will
+            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a
+                ground truth bounding box is supposed to either count or be neutral for the evaluation, this argument
+                decides what to do with these annotations.
+                If `True`, only non-neutral ground truth boxes will be counted, otherwise all ground truth boxes will
                 be counted.
             verbose (bool, optional): If `True`, will print out the progress during runtime.
             ret (bool, optional): If `True`, returns the list of counts.
 
         Returns:
-            None by default. Optionally, a list containing a count of the number of ground truth boxes for each class across the
-            entire dataset.
-        '''
+            None by default. Optionally, a list containing a count of the number of ground truth boxes for each class
+            across the entire dataset.
+        """
 
         if self.data_generator.labels is None:
-            raise ValueError("Computing the number of ground truth boxes per class not possible, no ground truth given.")
+            raise ValueError(
+                "Computing the number of ground truth boxes per class is not possible, no ground truth given.")
 
         num_gt_per_class = np.zeros(shape=(self.n_classes+1), dtype=np.int)
-
-        class_id_index = self.gt_format['class_id']
-
+        class_id_index = self.gt_format.index('class_id')
+        # 一个 list, 每一个元素都是一个 np.array
         ground_truth = self.data_generator.labels
 
         if verbose:
@@ -511,22 +533,18 @@ class Evaluator:
 
         # Iterate over the ground truth for all images in the dataset.
         for i in tr:
-
             boxes = np.asarray(ground_truth[i])
-
             # Iterate over all ground truth boxes for the current image.
             for j in range(boxes.shape[0]):
-
-                if ignore_neutral_boxes and not (self.data_generator.eval_neutral is None):
+                if ignore_neutral_boxes and self.data_generator.eval_neutral is not None:
                     if not self.data_generator.eval_neutral[i][j]:
-                        # If this box is not supposed to be evaluation-neutral,
-                        # increment the counter for the respective class ID.
+                        # If this box is not supposed to be evaluation-neutral, increment the counter for the respective
+                        # class ID.
                         class_id = boxes[j, class_id_index]
                         num_gt_per_class[class_id] += 1
                 else:
-                    # If there is no such thing as evaluation-neutral boxes for
-                    # our dataset, always increment the counter for the respective
-                    # class ID.
+                    # If there is no such thing as evaluation-neutral boxes for our dataset, always increment the
+                    # counter for the respective class ID.
                     class_id = boxes[j, class_id_index]
                     num_gt_per_class[class_id] += 1
 
@@ -542,54 +560,72 @@ class Evaluator:
                           sorting_algorithm='quicksort',
                           verbose=True,
                           ret=False):
-        '''
+        """
         Matches predictions to ground truth boxes.
 
         Note that `predict_on_dataset()` must be called before calling this method.
-
+        1. 遍历所有 class 的 predictions
+            2. 把 predictions 按 confidence 排序
+            3. 按 confidence 从大到小的顺序遍历所有的 predictions
+                4. 根据该 prediction 的 image_id, 找到该 image_id 下对应 class_id 的所有 gt_boxes
+                5. 如果 gt_boxes 为空, 该 prediction 为 false positive
+                6. 否则计算 prediction 和 gt_boxes 的 iou
+                7. 找到最大的 iou 和对应的 gt_box_index
+                8. 如果 iou > threshold
+                    9. 判断这个 gt_box 是否已经被 match 过
+                        10. 如果没有, prediction --> true positive
+                        11. 如果有, prediction --> false positive
+                12 否则 prediction --> false positive
         Arguments:
-            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a ground truth
-                bounding box is supposed to either count or be neutral for the evaluation, this argument decides what to do with these
-                annotations. If `False`, even boxes that are annotated as neutral will be counted into the evaluation. If `True`,
-                neutral boxes will be ignored for the evaluation. An example for evaluation-neutrality are the ground truth boxes
-                annotated as "difficult" in the Pascal VOC datasets, which are usually treated as neutral for the evaluation.
-            matching_iou_threshold (float, optional): A prediction will be considered a true positive if it has a Jaccard overlap
-                of at least `matching_iou_threshold` with any ground truth bounding box of the same class.
-            border_pixels (str, optional): How to treat the border pixels of the bounding boxes.
-                Can be 'include', 'exclude', or 'half'. If 'include', the border pixels belong
-                to the boxes. If 'exclude', the border pixels do not belong to the boxes.
-                If 'half', then one of each of the two horizontal and vertical borders belong
-                to the boxex, but not the other.
-            sorting_algorithm (str, optional): Which sorting algorithm the matching algorithm should use. This argument accepts
-                any valid sorting algorithm for Numpy's `argsort()` function. You will usually want to choose between 'quicksort'
-                (fastest and most memory efficient, but not stable) and 'mergesort' (slight slower and less memory efficient, but stable).
-                The official Matlab evaluation algorithm uses a stable sorting algorithm, so this algorithm is only guaranteed
-                to behave identically if you choose 'mergesort' as the sorting algorithm, but it will almost always behave identically
-                even if you choose 'quicksort' (but no guarantees).
+            ignore_neutral_boxes (bool, optional): In case the data generator provides annotations indicating whether a
+                ground truth bounding box is supposed to either count or be neutral for the evaluation, this argument
+                decides what to do with these annotations.
+                If `False`, even boxes that are annotated as neutral will be counted into the evaluation.
+                If `True`, neutral boxes will be ignored for the evaluation.
+                An example for evaluation-neutrality are the ground truth boxes annotated as "difficult" in the Pascal
+                VOC datasets, which are usually treated as neutral for the evaluation.
+            matching_iou_threshold (float, optional): A prediction will be considered a true positive if it has a
+                Jaccard overlap of at least `matching_iou_threshold` with any ground truth bounding box of the same
+                class.
+            border_pixels (str, optional): How to treat the border pixels of the bounding boxes. Can be 'include',
+                'exclude', or 'half'.
+                If 'include', the border pixels belong to the boxes.
+                If 'exclude', the border pixels do not belong to the boxes.
+                If 'half', then one of each of the two horizontal and vertical borders belong to the boxex, but not the
+                other.
+            sorting_algorithm (str, optional): Which sorting algorithm the matching algorithm should use. This argument
+                accepts any valid sorting algorithm for Numpy's `argsort()` function. You will usually want to choose
+                between 'quicksort' (fastest and most memory efficient, but not stable) and 'mergesort' (slight slower
+                and less memory efficient, but stable). The official Matlab evaluation algorithm uses a stable sorting
+                algorithm, so this algorithm is only guaranteed to behave identically if you choose 'mergesort' as the
+                sorting algorithm, but it will almost always behave identically even if you choose 'quicksort'
+                (but no guarantees).
             verbose (bool, optional): If `True`, will print out the progress during runtime.
             ret (bool, optional): If `True`, returns the true and false positives.
 
         Returns:
-            None by default. Optionally, four nested lists containing the true positives, false positives, cumulative true positives,
-            and cumulative false positives for each class.
-        '''
+            None by default. Optionally, four nested lists containing the true positives, false positives, cumulative
+            true positives, and cumulative false positives for each class.
+        """
 
         if self.data_generator.labels is None:
             raise ValueError("Matching predictions to ground truth boxes not possible, no ground truth given.")
 
         if self.prediction_results is None:
-            raise ValueError("There are no prediction results. You must run `predict_on_dataset()` before calling this method.")
+            raise ValueError(
+                "There are no prediction results. You must run `predict_on_dataset()` before calling this method.")
 
-        class_id_gt = self.gt_format['class_id']
-        xmin_gt = self.gt_format['xmin']
-        ymin_gt = self.gt_format['ymin']
-        xmax_gt = self.gt_format['xmax']
-        ymax_gt = self.gt_format['ymax']
+        class_id_gt = self.gt_format.index('class_id')
+        xmin_gt = self.gt_format.index('xmin')
+        ymin_gt = self.gt_format.index('ymin')
+        xmax_gt = self.gt_format.index('xmax')
+        ymax_gt = self.gt_format.index('ymax')
 
-        # Convert the ground truth to a more efficient format for what we need
-        # to do, which is access ground truth by image ID repeatedly.
+        # Convert the ground truth to a more efficient format for what we need to do, which is access ground truth by
+        # image ID repeatedly.
         ground_truth = {}
-        eval_neutral_available = not (self.data_generator.eval_neutral is None) # Whether or not we have annotations to decide whether ground truth boxes should be neutral or not.
+        # Whether or not we have annotations to decide whether ground truth boxes should be neutral or not.
+        eval_neutral_available = self.data_generator.eval_neutral is not None
         for i in range(len(self.data_generator.image_ids)):
             image_id = str(self.data_generator.image_ids[i])
             labels = self.data_generator.labels[i]
@@ -597,20 +633,21 @@ class Evaluator:
                 ground_truth[image_id] = (np.asarray(labels), np.asarray(self.data_generator.eval_neutral[i]))
             else:
                 ground_truth[image_id] = np.asarray(labels)
-
-        true_positives = [[]] # The false positives for each class, sorted by descending confidence.
-        false_positives = [[]] # The true positives for each class, sorted by descending confidence.
+        # The true positives for each class, sorted by descending confidence. 第一个 [] 用于表示 background.
+        true_positives = [[]]
+        # The false positives for each class, sorted by descending confidence. 第一个 [] 用于表示 background.
+        false_positives = [[]]
         cumulative_true_positives = [[]]
         cumulative_false_positives = [[]]
 
         # Iterate over all classes.
         for class_id in range(1, self.n_classes + 1):
-
             predictions = self.prediction_results[class_id]
-
             # Store the matching results in these lists:
-            true_pos = np.zeros(len(predictions), dtype=np.int) # 1 for every prediction that is a true positive, 0 otherwise
-            false_pos = np.zeros(len(predictions), dtype=np.int) # 1 for every prediction that is a false positive, 0 otherwise
+            # 1 for every prediction that is a true positive, 0 otherwise
+            true_pos = np.zeros(len(predictions), dtype=np.int)
+            # 1 for every prediction that is a false positive, 0 otherwise
+            false_pos = np.zeros(len(predictions), dtype=np.int)
 
             # In case there are no predictions at all for this class, we're done here.
             if len(predictions) == 0:
@@ -620,10 +657,12 @@ class Evaluator:
                 continue
 
             # Convert the predictions list for this class into a structured array so that we can sort it by confidence.
-
             # Get the number of characters needed to store the image ID strings in the structured array.
-            num_chars_per_image_id = len(str(predictions[0][0])) + 6 # Keep a few characters buffer in case some image IDs are longer than others.
+            # Keep a few characters buffer in case some image IDs are longer than others.
+            num_chars_per_image_id = len(str(predictions[0][0])) + 6
             # Create the data type for the structured array.
+            # 参见 https://docs.scipy.org/doc/numpy/reference/generated/numpy.dtype.html
+            # U 表示 unicode, U 和 f 后面的数字表示字节数
             preds_data_type = np.dtype([('image_id', 'U{}'.format(num_chars_per_image_id)),
                                         ('confidence', 'f4'),
                                         ('xmin', 'f4'),
@@ -632,7 +671,6 @@ class Evaluator:
                                         ('ymax', 'f4')])
             # Create the structured array
             predictions = np.array(predictions, dtype=preds_data_type)
-
             # Sort the detections by decreasing confidence.
             descending_indices = np.argsort(-predictions['confidence'], kind=sorting_algorithm)
             predictions_sorted = predictions[descending_indices]
@@ -645,85 +683,82 @@ class Evaluator:
 
             # Keep track of which ground truth boxes were already matched to a detection.
             gt_matched = {}
-
             # Iterate over all predictions.
             for i in tr:
-
                 prediction = predictions_sorted[i]
                 image_id = prediction['image_id']
-                pred_box = np.asarray(list(prediction[['xmin', 'ymin', 'xmax', 'ymax']])) # Convert the structured array element to a regular array.
+                # Convert the structured array element to a regular array.
+                pred_box = np.asarray(list(prediction[['xmin', 'ymin', 'xmax', 'ymax']]))
 
                 # Get the relevant ground truth boxes for this prediction,
-                # i.e. all ground truth boxes that match the prediction's
-                # image ID and class ID.
+                # i.e. all ground truth boxes that match the prediction's image ID and class ID.
 
                 # The ground truth could either be a tuple with `(ground_truth_boxes, eval_neutral_boxes)`
                 # or only `ground_truth_boxes`.
+                # 找出该 prediction 对应的 image 上所有的 gt boxes
                 if ignore_neutral_boxes and eval_neutral_available:
                     gt, eval_neutral = ground_truth[image_id]
                 else:
                     gt = ground_truth[image_id]
+                # 从 gt boxes 过滤出属于当前 class_id 的部分
                 gt = np.asarray(gt)
-                class_mask = gt[:,class_id_gt] == class_id
+                class_mask = gt[:, class_id_gt] == class_id
                 gt = gt[class_mask]
                 if ignore_neutral_boxes and eval_neutral_available:
                     eval_neutral = eval_neutral[class_mask]
-
                 if gt.size == 0:
-                    # If the image doesn't contain any objects of this class,
-                    # the prediction becomes a false positive.
+                    # If the image doesn't contain any objects of this class, the prediction becomes a false positive.
                     false_pos[i] = 1
                     continue
 
                 # Compute the IoU of this prediction with all ground truth boxes of the same class.
-                overlaps = iou(boxes1=gt[:,[xmin_gt, ymin_gt, xmax_gt, ymax_gt]],
+                overlaps = iou(boxes1=gt[:, [xmin_gt, ymin_gt, xmax_gt, ymax_gt]],
                                boxes2=pred_box,
                                coords='corners',
                                mode='element-wise',
                                border_pixels=border_pixels)
 
                 # For each detection, match the ground truth box with the highest overlap.
-                # It's possible that the same ground truth box will be matched to multiple
-                # detections.
+                # It's possible that the same ground truth box will be matched to multiple detections.
                 gt_match_index = np.argmax(overlaps)
                 gt_match_overlap = overlaps[gt_match_index]
 
                 if gt_match_overlap < matching_iou_threshold:
                     # False positive, IoU threshold violated:
-                    # Those predictions whose matched overlap is below the threshold become
-                    # false positives.
+                    # Those predictions whose matched overlap is below the threshold become false positives.
                     false_pos[i] = 1
                 else:
-                    if not (ignore_neutral_boxes and eval_neutral_available) or (eval_neutral[gt_match_index] == False):
+                    if not (ignore_neutral_boxes and eval_neutral_available) or (eval_neutral[gt_match_index] is False):
                         # If this is not a ground truth that is supposed to be evaluation-neutral
-                        # (i.e. should be skipped for the evaluation) or if we don't even have the
-                        # concept of neutral boxes.
-                        if not (image_id in gt_matched):
+                        # (i.e. should be skipped for the evaluation) or if we don't even have the concept of neutral
+                        # boxes.
+                        if image_id not in gt_matched:
                             # True positive:
-                            # If the matched ground truth box for this prediction hasn't been matched to a
-                            # different prediction already, we have a true positive.
+                            # If the matched ground truth box for this prediction hasn't been matched to a different
+                            # prediction already, we have a true positive.
                             true_pos[i] = 1
                             gt_matched[image_id] = np.zeros(shape=(gt.shape[0]), dtype=np.bool)
                             gt_matched[image_id][gt_match_index] = True
+                        # 这个 gt_boxes 还没有 match
                         elif not gt_matched[image_id][gt_match_index]:
                             # True positive:
-                            # If the matched ground truth box for this prediction hasn't been matched to a
-                            # different prediction already, we have a true positive.
+                            # If the matched ground truth box for this prediction hasn't been matched to a different
+                            # prediction already, we have a true positive.
                             true_pos[i] = 1
                             gt_matched[image_id][gt_match_index] = True
                         else:
                             # False positive, duplicate detection:
-                            # If the matched ground truth box for this prediction has already been matched
-                            # to a different prediction previously, it is a duplicate detection for an
-                            # already detected object, which counts as a false positive.
+                            # If the matched ground truth box for this prediction has already been matched to a
+                            # different prediction previously, it is a duplicate detection for an already detected
+                            # object, which counts as a false positive.
                             false_pos[i] = 1
 
             true_positives.append(true_pos)
             false_positives.append(false_pos)
-
-            cumulative_true_pos = np.cumsum(true_pos) # Cumulative sums of the true positives
-            cumulative_false_pos = np.cumsum(false_pos) # Cumulative sums of the false positives
-
+            # Cumulative sums of the true positives
+            cumulative_true_pos = np.cumsum(true_pos)
+            # Cumulative sums of the false positives
+            cumulative_false_pos = np.cumsum(false_pos)
             cumulative_true_positives.append(cumulative_true_pos)
             cumulative_false_positives.append(cumulative_false_pos)
 
@@ -736,7 +771,7 @@ class Evaluator:
             return true_positives, false_positives, cumulative_true_positives, cumulative_false_positives
 
     def compute_precision_recall(self, verbose=True, ret=False):
-        '''
+        """
         Computes the precisions and recalls for all classes.
 
         Note that `match_predictions()` must be called before calling this method.
@@ -746,14 +781,17 @@ class Evaluator:
             ret (bool, optional): If `True`, returns the precisions and recalls.
 
         Returns:
-            None by default. Optionally, two nested lists containing the cumulative precisions and recalls for each class.
-        '''
+            None by default.
+            Optionally, two nested lists containing the cumulative precisions and recalls for each class.
+        """
 
         if (self.cumulative_true_positives is None) or (self.cumulative_false_positives is None):
-            raise ValueError("True and false positives not available. You must run `match_predictions()` before you call this method.")
+            raise ValueError("True and false positives not available." 
+                             " You must run `match_predictions()` before you call this method.")
 
-        if (self.num_gt_per_class is None):
-            raise ValueError("Number of ground truth boxes per class not available. You must run `get_num_gt_per_class()` before you call this method.")
+        if self.num_gt_per_class is None:
+            raise ValueError("Number of ground truth boxes per class not available."
+                             "You must run `get_num_gt_per_class()` before you call this method.")
 
         cumulative_precisions = [[]]
         cumulative_recalls = [[]]
@@ -766,11 +804,11 @@ class Evaluator:
 
             tp = self.cumulative_true_positives[class_id]
             fp = self.cumulative_false_positives[class_id]
-
-
-            cumulative_precision = np.where(tp + fp > 0, tp / (tp + fp), 0) # 1D array with shape `(num_predictions,)`
-            cumulative_recall = tp / self.num_gt_per_class[class_id] # 1D array with shape `(num_predictions,)`
-
+            # 1D array with shape `(num_predictions,)`
+            cumulative_precision = np.where(tp + fp > 0, tp / (tp + fp), 0)
+            # 1D array with shape `(num_predictions,)`
+            # 注意这里的 num_gt_per_class 已经把 neutral 去掉了
+            cumulative_recall = tp / self.num_gt_per_class[class_id]
             cumulative_precisions.append(cumulative_precision)
             cumulative_recalls.append(cumulative_recall)
 
@@ -781,24 +819,27 @@ class Evaluator:
             return cumulative_precisions, cumulative_recalls
 
     def compute_average_precisions(self, mode='sample', num_recall_points=11, verbose=True, ret=False):
-        '''
+        """
         Computes the average precision for each class.
 
-        Can compute the Pascal-VOC-style average precision in both the pre-2010 (k-point sampling)
-        and post-2010 (integration) algorithm versions.
+        Can compute the Pascal-VOC-style average precision in both the pre-2010 (k-point sampling) and post-2010
+        (integration) algorithm versions.
 
         Note that `compute_precision_recall()` must be called before calling this method.
 
         Arguments:
-            mode (str, optional): Can be either 'sample' or 'integrate'. In the case of 'sample', the average precision will be computed
-                according to the Pascal VOC formula that was used up until VOC 2009, where the precision will be sampled for `num_recall_points`
-                recall values. In the case of 'integrate', the average precision will be computed according to the Pascal VOC formula that
-                was used from VOC 2010 onward, where the average precision will be computed by numerically integrating over the whole
-                preciscion-recall curve instead of sampling individual points from it. 'integrate' mode is basically just the limit case
-                of 'sample' mode as the number of sample points increases. For details, see the references below.
-            num_recall_points (int, optional): Only relevant if mode is 'sample'. The number of points to sample from the precision-recall-curve
-                to compute the average precisions. In other words, this is the number of equidistant recall values for which the resulting
-                precision will be computed. 11 points is the value used in the official Pascal VOC pre-2010 detection evaluation algorithm.
+            mode (str, optional): Can be either 'sample' or 'integrate'.
+                In the case of 'sample', the average precision will be computed according to the Pascal VOC formula that
+                was used up until VOC 2009, where the precision will be sampled for `num_recall_points` recall values.
+                In the case of 'integrate', the average precision will be computed according to the Pascal VOC formula
+                that was used from VOC 2010 onward, where the average precision will be computed by numerically
+                integrating over the whole precision-recall curve instead of sampling individual points from it.
+                'integrate' mode is basically just the limit case of 'sample' mode as the number of sample points
+                increases. For details, see the references below.
+            num_recall_points (int, optional): Only relevant if mode is 'sample'. The number of points to sample from
+                the precision-recall-curve to compute the average precisions. In other words, this is the number of
+                equidistant recall values for which the resulting precision will be computed. 11 points is the value
+                used in the official Pascal VOC pre-2010 detection evaluation algorithm.
             verbose (bool, optional): If `True`, will print out the progress during runtime.
             ret (bool, optional): If `True`, returns the average precisions.
 
@@ -807,19 +848,19 @@ class Evaluator:
 
         References:
             http://host.robots.ox.ac.uk/pascal/VOC/voc2012/htmldoc/devkit_doc.html#sec:ap
-        '''
+        """
 
         if (self.cumulative_precisions is None) or (self.cumulative_recalls is None):
-            raise ValueError("Precisions and recalls not available. You must run `compute_precision_recall()` before you call this method.")
+            raise ValueError("Precisions and recalls not available. "
+                             "You must run `compute_precision_recall()` before you call this method.")
 
-        if not (mode in {'sample', 'integrate'}):
+        if mode not in {'sample', 'integrate'}:
             raise ValueError("`mode` can be either 'sample' or 'integrate', but received '{}'".format(mode))
 
         average_precisions = [0.0]
 
         # Iterate over all classes.
         for class_id in range(1, self.n_classes + 1):
-
             if verbose:
                 print("Computing average precision, class {}/{}".format(class_id, self.n_classes))
 
@@ -828,32 +869,26 @@ class Evaluator:
             average_precision = 0.0
 
             if mode == 'sample':
-
                 for t in np.linspace(start=0, stop=1, num=num_recall_points, endpoint=True):
-
+                    # recall 大于 t 的所有 precision
                     cum_prec_recall_greater_t = cumulative_precision[cumulative_recall >= t]
-
                     if cum_prec_recall_greater_t.size == 0:
                         precision = 0.0
                     else:
+                        # 最大的 precision 作为此 recall 点的 precision
                         precision = np.amax(cum_prec_recall_greater_t)
-
                     average_precision += precision
-
                 average_precision /= num_recall_points
-
             elif mode == 'integrate':
-
                 # We will compute the precision at all unique recall values.
-                unique_recalls, unique_recall_indices, unique_recall_counts = np.unique(cumulative_recall, return_index=True, return_counts=True)
-
-                # Store the maximal precision for each recall value and the absolute difference
-                # between any two unique recal values in the lists below. The products of these
-                # two nummbers constitute the rectangular areas whose sum will be our numerical
-                # integral.
+                unique_recalls, unique_recall_indices, unique_recall_counts = np.unique(cumulative_recall,
+                                                                                        return_index=True,
+                                                                                        return_counts=True)
+                # Store the maximal precision for each recall value and the absolute difference between any two unique
+                # recall values in the lists below. The products of these two numbers constitute the rectangular areas
+                # whose sum will be our numerical integral.
                 maximal_precisions = np.zeros_like(unique_recalls)
                 recall_deltas = np.zeros_like(unique_recalls)
-
                 # Iterate over all unique recall values in reverse order. This saves a lot of computation:
                 # For each unique recall value `r`, we want to get the maximal precision value obtained
                 # for any recall value `r* >= r`. Once we know the maximal precision for the last `k` recall
@@ -864,27 +899,30 @@ class Evaluator:
                 # We skip the very last recall value, since the precision after between the last recall value
                 # recall 1.0 is defined to be zero.
                 for i in range(len(unique_recalls)-2, -1, -1):
+                    # 当前 recall 在 cumulative_recall 中的下标
+                    # 下一个 recall 在 cumulative_recall 中的下标
                     begin = unique_recall_indices[i]
-                    end   = unique_recall_indices[i + 1]
+                    end = unique_recall_indices[i + 1]
                     # When computing the maximal precisions, use the maximum of the previous iteration to
                     # avoid unnecessary repeated computation over the same precision values.
                     # The maximal precisions are the heights of the rectangle areas of our integral under
                     # the precision-recall curve.
-                    maximal_precisions[i] = np.maximum(np.amax(cumulative_precision[begin:end]), maximal_precisions[i + 1])
+                    # np.amax(cumulative_precision[begin:end]) 得到当前 recall 的最大 precision
+                    # maximal_precisions[i + 1] 得到之后 recall 的最大 precision
+                    # 两者的最大值, 作为当前 recall 和下一个 recall 所组矩形的高
+                    maximal_precisions[i] = np.maximum(np.amax(cumulative_precision[begin:end]),
+                                                       maximal_precisions[i + 1])
                     # The differences between two adjacent recall values are the widths of our rectangle areas.
                     recall_deltas[i] = unique_recalls[i + 1] - unique_recalls[i]
-
                 average_precision = np.sum(maximal_precisions * recall_deltas)
-
             average_precisions.append(average_precision)
-
         self.average_precisions = average_precisions
 
         if ret:
             return average_precisions
 
     def compute_mean_average_precision(self, ret=True):
-        '''
+        """
         Computes the mean average precision over all classes.
 
         Note that `compute_average_precisions()` must be called before calling this method.
@@ -894,12 +932,14 @@ class Evaluator:
 
         Returns:
             A float, the mean average precision, by default. Optionally, None.
-        '''
+        """
 
         if self.average_precisions is None:
-            raise ValueError("Average precisions not available. You must run `compute_average_precisions()` before you call this method.")
+            raise ValueError("Average precisions not available."
+                             "You must run `compute_average_precisions()` before you call this method.")
 
-        mean_average_precision = np.average(self.average_precisions[1:]) # The first element is for the background class, so skip it.
+        # The first element is for the background class, so skip it.
+        mean_average_precision = np.average(self.average_precisions[1:])
         self.mean_average_precision = mean_average_precision
 
         if ret:

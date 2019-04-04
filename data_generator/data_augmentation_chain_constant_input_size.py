@@ -177,21 +177,11 @@ class DataAugmentationConstantInputSize:
 
         # Choose sequence 1 with probability 0.5.
         if np.random.choice(2):
-            if labels is not None:
-                for transform in self.sequence1:
-                    image, labels = transform(image, labels)
-                return image, labels
-            else:
-                for transform in self.sequence1:
-                    image = transform(image)
-                return image
+            for transform in self.sequence1:
+                image, labels = transform(image, labels)
+            return image, labels
         # Choose sequence 2 with probability 0.5.
         else:
-            if labels is not None:
-                for transform in self.sequence2:
-                    image, labels = transform(image, labels)
-                return image, labels
-            else:
-                for transform in self.sequence2:
-                    image = transform(image)
-                return image
+            for transform in self.sequence2:
+                image, labels = transform(image, labels)
+            return image, labels

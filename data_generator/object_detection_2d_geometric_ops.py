@@ -285,7 +285,7 @@ class Translate:
                                borderValue=self.background)
 
         if labels is None:
-            return image
+            return image, labels
         else:
             xmin = self.labels_format.index('xmin')
             ymin = self.labels_format.index('ymin')
@@ -423,14 +423,8 @@ class RandomTranslate:
                                             image_width=img_width):
                         return self.translate(image, labels)
             # If all attempts failed, return the unaltered input image.
-            if labels is None:
-                return image
-            else:
-                return image, labels
-        elif labels is None:
-            return image
-        else:
             return image, labels
+        return image, labels
 
 
 class Scale:
@@ -483,7 +477,7 @@ class Scale:
                                borderMode=cv2.BORDER_CONSTANT,
                                borderValue=self.background)
         if labels is None:
-            return image
+            return image, labels
         else:
             xmin = self.labels_format.index('xmin')
             ymin = self.labels_format.index('ymin')
@@ -629,14 +623,8 @@ class RandomScale:
                                             image_width=img_width):
                         return self.scale(image, labels)
             # If all attempts failed, return the unaltered input image.
-            if labels is None:
-                return image
-            else:
-                return image, labels
-        elif labels is None:
-            return image
-        else:
             return image, labels
+        return image, labels
 
 
 class Rotate:
@@ -686,7 +674,7 @@ class Rotate:
                                M=rotation_matrix,
                                dsize=(img_width_new, img_height_new))
         if labels is None:
-            return image
+            return image, labels
         else:
             xmin = self.labels_format.index('xmin')
             ymin = self.labels_format.index('ymin')
@@ -758,7 +746,4 @@ class RandomRotate:
             self.rotate.angle = random.choice(self.angles)
             self.rotate.labels_format = self.labels_format
             return self.rotate(image, labels)
-        elif labels is None:
-            return image
-        else:
-            return image, labels
+        return image, labels

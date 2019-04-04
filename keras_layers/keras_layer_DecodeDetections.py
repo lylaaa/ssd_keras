@@ -1,4 +1,4 @@
-'''
+"""
 A custom Keras layer to decode the raw SSD prediction output. Corresponds to the
 `DetectionOutput` layer type in the original Caffe implementation of SSD.
 
@@ -15,7 +15,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-'''
+"""
 
 from __future__ import division
 import numpy as np
@@ -24,8 +24,9 @@ import keras.backend as K
 from keras.engine.topology import InputSpec
 from keras.engine.topology import Layer
 
+
 class DecodeDetections(Layer):
-    '''
+    """
     A Keras layer to decode the raw SSD prediction output.
 
     Input shape:
@@ -33,7 +34,7 @@ class DecodeDetections(Layer):
 
     Output shape:
         3D tensor of shape `(batch_size, top_k, 6)`.
-    '''
+    """
 
     def __init__(self,
                  confidence_thresh=0.01,
@@ -45,7 +46,7 @@ class DecodeDetections(Layer):
                  img_height=None,
                  img_width=None,
                  **kwargs):
-        '''
+        """
         All default argument values follow the Caffe implementation.
 
         Arguments:
@@ -71,7 +72,7 @@ class DecodeDetections(Layer):
                 coordinates. Requires `img_height` and `img_width` if set to `True`.
             img_height (int, optional): The height of the input images. Only needed if `normalize_coords` is `True`.
             img_width (int, optional): The width of the input images. Only needed if `normalize_coords` is `True`.
-        '''
+        """
         if K.backend() != 'tensorflow':
             raise TypeError("This layer only supports TensorFlow at the moment, but you are using the {} backend.".format(K.backend()))
 
@@ -107,13 +108,13 @@ class DecodeDetections(Layer):
         super(DecodeDetections, self).build(input_shape)
 
     def call(self, y_pred, mask=None):
-        '''
+        """
         Returns:
             3D tensor of shape `(batch_size, top_k, 6)`. The second axis is zero-padded
             to always yield `top_k` predictions per batch item. The last axis contains
             the coordinates for each predicted box in the format
             `[class_id, confidence, xmin, ymin, xmax, ymax]`.
-        '''
+        """
 
         #####################################################################################
         # 1. Convert the box coordinates from predicted anchor box offsets to predicted
@@ -184,7 +185,6 @@ class DecodeDetections(Layer):
                 # If any boxes made the threshold, perform NMS.
                 def perform_nms():
                     scores = single_class[...,1]
-
                     # `tf.image.non_max_suppression()` needs the box coordinates in the format `(ymin, xmin, ymax, xmax)`.
                     xmin = tf.expand_dims(single_class[...,-4], axis=-1)
                     ymin = tf.expand_dims(single_class[...,-3], axis=-1)

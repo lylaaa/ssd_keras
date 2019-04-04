@@ -840,22 +840,22 @@ class RandomPadFixedAR:
     def __init__(self,
                  patch_aspect_ratio,
                  background=(0, 0, 0),
-                 labels_format={'class_id': 0, 'xmin': 1, 'ymin': 2, 'xmax': 3, 'ymax': 4}):
+                 labels_format=('class_id', 'xmin', 'ymin', 'xmax', 'ymax')):
         """
         Arguments:
             patch_aspect_ratio (float): The fixed aspect ratio that all sampled patches will have.
             background (list/tuple, optional): A 3-tuple specifying the RGB color value of the potential
                 background pixels of the scaled images. In the case of single-channel images,
                 the first element of `background` will be used as the background pixel value.
-            labels_format (dict, optional): A dictionary that defines which index in the last axis of the labels
-                of an image contains which bounding box coordinate. The dictionary maps at least the keywords
-                'xmin', 'ymin', 'xmax', and 'ymax' to their respective indices within last axis of the labels array.
+            labels_format (list/tuple, optional): A list/tuple that defines what in the last axis of the labels of an
+                image. The list/tuple contains at least the keywords 'xmin', 'ymin', 'xmax', and 'ymax'.
         """
 
         self.patch_aspect_ratio = patch_aspect_ratio
         self.background = background
         self.labels_format = labels_format
-        self.random_patch = RandomPatch(patch_coord_generator=PatchCoordinateGenerator(),  # Just a dummy object
+        # patch_coord_generator is a dummy object, will be overwrited when called
+        self.random_patch = RandomPatch(patch_coord_generator=PatchCoordinateGenerator(),
                                         box_filter=None,
                                         image_validator=None,
                                         n_trials_max=1,
@@ -865,9 +865,7 @@ class RandomPadFixedAR:
                                         labels_format=self.labels_format)
 
     def __call__(self, image, labels=None, return_inverter=False):
-
         img_height, img_width = image.shape[:2]
-
         if img_width < img_height:
             patch_height = img_height
             patch_width = int(round(patch_height * self.patch_aspect_ratio))

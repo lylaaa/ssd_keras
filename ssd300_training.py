@@ -80,15 +80,16 @@ model = ssd_300(image_size=(img_height, img_width, img_channels),
 
 # 2: Load some weights into the model.
 # TODO: Set the path to the weights you want to load.
-# weights_path = 'path/to/VGG_ILSVRC_16_layers_fc_reduced.h5'
-# model.load_weights(weights_path, by_name=True)
+weights_path = 'VGG_ILSVRC_16_layers_fc_reduced.h5'
+model.load_weights(weights_path, by_name=True)
 
 # 3: Instantiate an optimizer and the SSD loss function and compile the model.
 #    If you want to follow the original Caffe implementation, use the preset SGD
 #    optimizer, otherwise I'd recommend the commented-out Adam optimizer.
-sgd = SGD(lr=0.001, momentum=0.9, decay=0.0, nesterov=False)
+adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+# sgd = SGD(lr=0.001, momentum=0.9, decay=0.0, nesterov=False)
 ssd_loss = SSDLoss(neg_pos_ratio=3, alpha=1.0)
-model.compile(optimizer=sgd, loss=ssd_loss.compute_loss)
+model.compile(optimizer=adam, loss=ssd_loss.compute_loss)
 
 ############################################################################
 # Set up the data generators for the training
@@ -268,7 +269,6 @@ initial_epoch = 0
 final_epoch = 120
 steps_per_epoch = 1000
 
-print(next(train_generator))
 H = model.fit_generator(generator=train_generator,
                         steps_per_epoch=steps_per_epoch,
                         epochs=final_epoch,
