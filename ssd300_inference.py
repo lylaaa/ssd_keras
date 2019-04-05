@@ -167,8 +167,9 @@ while True:
     batch_images, batch_filenames, batch_inverse_transforms, batch_original_images, batch_original_labels = next(
         predict_generator)
     # print("Image:", batch_filenames[0])
-    print("Ground truth boxes:\n")
+    print("Ground truth boxes:")
     print(batch_original_labels[0])
+    print()
     # 3: Make a prediction
     y_pred = model.predict(batch_images)
     mode = 'inference'
@@ -183,10 +184,11 @@ while True:
                                            img_width=image_width)
     else:
         y_pred_decoded = [y_pred[k][y_pred[k, :, 1] > 0.5] for k in range(y_pred.shape[0])]
-    print("Predicted boxes:\n")
+    print("Predicted boxes:")
     print('   class   conf xmin   ymin   xmax   ymax')
     np.set_printoptions(precision=2, suppress=True, linewidth=90)
     print(y_pred_decoded[0])
+    print()
     image = batch_original_images[0][:, :, ::-1]
     image = image.copy()
 
@@ -202,7 +204,9 @@ while True:
     # Draw the predicted boxes in blue
     if len(y_pred_decoded[0]) > 0:
         y_pred_decoded = np.array(y_pred_decoded)
-        y_pred = apply_inverse_transforms(y_pred_decoded[:, :, [0, 2, 3, 4, 5]], batch_inverse_transforms)
+        y_pred = apply_inverse_transforms(y_pred_decoded, batch_inverse_transforms)
+        print("Inversely transformed predicted boxes:")
+        print(y_pred[0])
         for box in y_pred[0]:
             xmin = int(round(box[-4]))
             ymin = int(round(box[-3]))

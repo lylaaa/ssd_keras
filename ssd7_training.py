@@ -167,8 +167,9 @@ ssd_input_encoder = SSDInputEncoder(img_height=img_height,
                                     matching_type='multi',
                                     pos_iou_threshold=0.5,
                                     neg_iou_limit=0.3,
-                                    normalize_coords=normalize_coords,
+                                    border_pixels='half',
                                     coords='centroids',
+                                    normalize_coords=normalize_coords,
                                     )
 
 # 6: Create the generator handles that will be passed to Keras' `fit_generator()` function.

@@ -90,8 +90,8 @@ class SSDInputEncoder:
                 layer. If a list is passed, it overrides `aspect_ratios_global`.
                 Note that you should set the aspect ratios such that the resulting anchor box shapes very roughly
                  correspond to the shapes of the objects you are trying to detect.
-            two_boxes_for_ar1 (bool, optional): Only relevant for aspect ratios lists that contain 1. Will be ignored otherwise.
-                If `True`, two anchor boxes will be generated for aspect ratio 1. The first will be generated
+            two_boxes_for_ar1 (bool, optional): Only relevant for aspect ratios lists that contain 1. Will be ignored
+                otherwise. If `True`, two anchor boxes will be generated for aspect ratio 1. The first will be generated
                 using the scaling factor for the respective layer, the second one will be generated using
                 geometric mean of said scaling factor and next bigger scaling factor.
             steps (list, optional): `None` or a list with as many elements as there are predictor layers.
@@ -104,7 +104,7 @@ class SSDInputEncoder:
                 equidistant grid within the image dimensions.
             offsets (list, optional): `None` or a list with as many elements as there are predictor layers.
                 The elements can be either floats or tuples of two floats. These numbers represent for each predictor
-                layer how many pixels from the top and left boarders of the image the top-most and left-most anchor box
+                layer how many pixels from the top and left borders of the image the top-most and left-most anchor box
                 center points should be as a fraction of `steps`.
                 The last bit is important: The offsets are not absolute pixel values, but fractions of the step size
                 specified in the `steps` argument. If the list contains floats, then that value will be used for both
@@ -116,22 +116,22 @@ class SSDInputEncoder:
             variances (list, optional): A list of 4 floats >0. The anchor box offset for each coordinate will be divided
                 by its respective variance value.
             matching_type (str, optional): Can be either 'multi' or 'bipartite'.
-                In 'bipartite' mode, each ground truth box will be matched only to the one anchor box with
-                the highest IoU overlap.
+                In 'bipartite' mode, each ground truth box will be matched only to the one anchor box with the highest
+                IoU overlap.
                 In 'multi' mode, in addition to the aforementioned(上述提及的) bipartite matching, all anchor boxes with
                 an IoU overlap greater than or equal to the `pos_iou_threshold` will be matched to a given ground truth
                 box.
-            pos_iou_threshold (float, optional): The intersection-over-union similarity threshold that must be
-                met in order to match a given ground truth box to a given anchor box.
-            neg_iou_limit (float, optional): The maximum allowed intersection-over-union similarity of an
-                anchor box with any ground truth box to be labeled a negative (i.e. background) box. If an
-                anchor box is neither a positive, nor a negative box, it will be ignored during training.
+            pos_iou_threshold (float, optional): The intersection-over-union similarity threshold that must be met in
+                order to match a given ground truth box to a given anchor box.
+            neg_iou_limit (float, optional): The maximum allowed intersection-over-union similarity of an anchor box
+                with any ground truth box to be labeled a negative (i.e. background) box. If an anchor box is neither a
+                positive, nor a negative box, it will be ignored during training.
             border_pixels (str, optional): How to treat the border pixels of the bounding boxes. Can be 'include',
                 'exclude', or 'half'.
                 If 'include', the border pixels belong to the boxes.
                 If 'exclude', the border pixels do not belong to the boxes.
-                If 'half', then one of each of the two horizontal and vertical borders belong to the boxes,
-                but not the other.
+                If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
+                other.
             coords (str, optional): The box coordinate format to be used internally by the model (i.e. this is not the
                 input format of the ground truth labels).
                 Can be either 'centroids' for the format `(cx, cy, w, h)` (box center coordinates, width, and height),
@@ -169,6 +169,7 @@ class SSDInputEncoder:
                     raise ValueError("Element of `predictor_sizes` must be a 2-int tuple")
             else:
                 predictor_sizes = np.array(predictor_sizes)
+                # predictor_sizes[:, 0] 表示的是 height, predictor_sizes[:, 1] 表示的是 width.
                 self.predictor_sizes = predictor_sizes
 
         if (min_scale is None or max_scale is None) and scales is None:
@@ -185,7 +186,8 @@ class SSDInputEncoder:
                 scales = np.array(scales)
                 if np.any(scales <= 0):
                     raise ValueError(
-                        "All values in `scales` must be greater than 0, but the passed list of scales is {}".format(scales))
+                        "All values in `scales` must be greater than 0, but the passed list of scales is {}".format(
+                            scales))
                 else:
                     self.scales = scales
                     self.min_scale = min_scale
@@ -194,6 +196,7 @@ class SSDInputEncoder:
             # If no explicit list of scaling factors was passed, we need to
             # 1. make sure that `min_scale` and `max_scale` are valid values.
             # 2. compute the list of scaling factors from `min_scale` and `max_scale`
+            # 如果 min_scale==max_scale, np.linspace(min_scale,max_scale,n) 返回 n 个数都为 min_scale/max_scale
             if not 0 < min_scale <= max_scale:
                 raise ValueError(
                     "It must be 0 < min_scale <= max_scale, but it is min_scale = {} and max_scale = {}".format(
@@ -203,12 +206,6 @@ class SSDInputEncoder:
                 self.scales = scales
                 self.min_scale = min_scale
                 self.max_scale = max_scale
-
-        # two_boxes_for_ar1
-        if not (isinstance(two_boxes_for_ar1, bool)):
-            raise ValueError('`two_boxes_for_ar1` must be bool')
-        else:
-            self.two_boxes_for_ar1 = two_boxes_for_ar1
 
         # aspect_ratios
         if aspect_ratios_per_layer is not None:
@@ -261,9 +258,15 @@ class SSDInputEncoder:
                     self.n_boxes = len(aspect_ratios_global)
                 self.n_boxes = [self.n_boxes] * predictor_sizes.shape[0]
 
+        # two_boxes_for_ar1
+        if not (isinstance(two_boxes_for_ar1, bool)):
+            raise ValueError('`two_boxes_for_ar1` must be bool')
+        else:
+            self.two_boxes_for_ar1 = two_boxes_for_ar1
+
         if steps is not None:
             if not (isinstance(steps, (list, tuple)) and (len(steps) == predictor_sizes.shape[0])):
-                raise ValueError("You must provide at least one step value per predictor layer.")
+                raise ValueError("You must provide one step value per predictor layer.")
             else:
                 self.steps = steps
         else:
@@ -271,7 +274,7 @@ class SSDInputEncoder:
 
         if offsets is not None:
             if not (isinstance(offsets, (list, tuple)) and (len(offsets) == predictor_sizes.shape[0])):
-                raise ValueError("You must provide at least one offset value per predictor layer.")
+                raise ValueError("You must provide one offset value per predictor layer.")
             else:
                 self.offsets = offsets
         else:
@@ -340,25 +343,27 @@ class SSDInputEncoder:
         # This will store the anchor boxes for each predictor layer.
         self.boxes_list = []
 
-        # The following lists just store diagnostic information. Sometimes it's handy to have the
-        # anchor boxes' center points, heights, widths, etc. in a list.
+        # The following lists just store diagnostic information. Sometimes it's handy to have the anchor boxes'
+        # center points, heights, widths, etc. in a list.
 
-        # Box widths and heights for each predictor layer
+        # Anchor box center points as `(cy, cx)` for each predictor layer
+        self.centers_diag = []
+        # Anchor box widths and heights for each predictor layer
         self.wh_list_diag = []
         # Horizontal and vertical distances between any two boxes for each predictor layer
         self.steps_diag = []
         # Offsets for each predictor layer
         self.offsets_diag = []
-        # Anchor box center points as `(cy, cx)` for each predictor layer
-        self.centers_diag = []
 
         # Iterate over all predictor layers and compute the anchor boxes for each one.
         for i in range(len(self.predictor_sizes)):
             # boxes 为 np.array, shape 为 (predictor_sizes[i][0], predictor_sizes[i][1], self.n_boxes[i], 4)
             # center 为 tuple, 有两个 np.array 类型的元素, 每个元素的 shape 为 (predictor_sizes[i][0], predictor_sizes[i][1])
-            # wh 为 np.array, shape 为 (self.n_boxes, 2)
-            # step 为 tuple, 有两个 int/float 类型的元素
-            # offset 为 tuple, 有两个 float 类型的元素
+            # wh 为 np.array, shape 为 (self.n_boxes, 2), 第一个元素表示 anchor 的 width, 第二个元素表示 anchor 的 height
+            # step 为 tuple, 有两个 int/float 类型的元素, 第一个元素表示是竖直方向上两个 anchor 的中心点的距离, 第二个
+            #  元素表示水平方向上两个 anchor 中心点的距离
+            # offset 为 tuple, 有两个 float 类型的元素, 第一个元素表示最左上方的 anchor 的中心点 y 坐标(以 step[0] 的 fraction 表示),
+            # 第二个元素表示 anchor 中心点 x 坐标(以 step[1] 的 fraction 表示)
             boxes, center, wh, step, offset = self.generate_anchor_boxes_for_layer(
                 feature_map_size=self.predictor_sizes[i],
                 aspect_ratios=self.aspect_ratios[i],
@@ -585,11 +590,15 @@ class SSDInputEncoder:
                                         this_offsets=None,
                                         diagnostics=False):
         """
-        Computes an array of the spatial positions and sizes of the anchor boxes for one predictor layer
-        of size `feature_map_size == [feature_map_height, feature_map_width]`.
+        Computes an array of the spatial positions and sizes of the anchor boxes for one predictor layer of size
+        `feature_map_size == [feature_map_height, feature_map_width]`.
 
+        # 先算出 self.image_width, self.image_height 的较小值
+        # 然后根据 this_scale 和 next_scale 算出各种 ap 的 anchor_boxes 的 width, height
+        # 根据 this_steps 和 this_offsets 算出最左上方的 anchor_box 的中心点的 x, y 坐标
+        # 推算出 (feature_map_size[0], feature_map_size[1]) 个 anchor_boxes 的中心点的坐标
         Arguments:
-            feature_map_size (tuple): A list or tuple `[feature_map_height, feature_map_width]` with the spatial
+            feature_map_size (list/tuple): A list or tuple `[feature_map_height, feature_map_width]` with the spatial
                 dimensions of the feature map for which to generate the anchor boxes.
             aspect_ratios (list): A list of floats, the aspect ratios for which anchor boxes are to be generated.
                 All list elements must be unique.
@@ -598,8 +607,8 @@ class SSDInputEncoder:
             next_scale (float): A float in [0, 1], the next larger scaling factor. Only relevant if
                 `self.two_boxes_for_ar1 == True`.
             n_boxes (int): An int, number of anchor boxes of one pixel in feature map
-            this_steps (int or 2-int tuple):
-            this_offsets (float or 2-float tuple):
+            this_steps (int or 2-int tuple): anchor 中心点右移一个位置和下移一个位置的距离
+            this_offsets (float or 2-float tuple): 最左上方的 anchor 的中心点的相对于 feature_map 左上方点的偏移量
             diagnostics (bool, optional): If true, the following additional outputs will be returned:
                 1) A list of the center point `x` and `y` coordinates for each spatial location.
                 2) A list containing `(width, height)` for each box aspect ratio.
@@ -634,9 +643,9 @@ class SSDInputEncoder:
                 box_width = this_scale * size * np.sqrt(aspect_ratio)
                 box_height = this_scale * size / np.sqrt(aspect_ratio)
                 wh_list.append((box_width, box_height))
-        wh_list = np.array(wh_list)
-        assert len(wh_list) == n_boxes, \
-            'incorrect number of anchor boxes, len(wh_list)={} and n_boxes={}'.format(wh_list, n_boxes)
+        wh_array = np.array(wh_list)
+        assert len(wh_array) == n_boxes, \
+            'incorrect number of anchor boxes, len(wh_array)={} and n_boxes={}'.format(wh_array, n_boxes)
 
         ##################################################################################
         # Compute the grid of box center points. They are identical for all aspect ratios.
@@ -672,12 +681,18 @@ class SSDInputEncoder:
                 raise ValueError('`this_offsets` must be one of 2-float list, 2-float tuple and float')
 
         # 3. Now that we have the offsets and step sizes, compute the grid of anchor box center points.
-        # feature_map 上每一个像素点的中心坐标
-        cy = np.linspace(offset_height * step_height, (offset_height + feature_map_size[0] - 1) * step_height,
+        # 第一个 anchor 的中心点往下移动 (feature_map_size[0] - 1) 个位置, 这样一共就有 feature_map_size[0] 个 位置
+        # (feature_map_size[0], )
+        cy = np.linspace(offset_height * step_height,
+                         offset_height * step_height + (feature_map_size[0] - 1) * step_height,
                          feature_map_size[0])
-        cx = np.linspace(offset_width * step_width, (offset_width + feature_map_size[1] - 1) * step_width,
+        # 第一个 anchor 的中心点往右移动 (feature_map_size[1] - 1) 个位置, 这样一共就有 feature_map_size[1] 个 位置
+        # (feature_map_size[1], )
+        cx = np.linspace(offset_width * step_width,
+                         offset_width * step_width + (feature_map_size[1] - 1) * step_width,
                          feature_map_size[1])
         # shape 为 (feature_map_size[1], feature_map_size[0])
+        # meshgrid 的操作, cx_grid 相当于把 cx 作为一行复制 len(cy) 次, cy_grid 相当于把 cy 作为一列复制 len(cx) 次
         cx_grid, cy_grid = np.meshgrid(cx, cy)
         # This is necessary for np.tile() to do what we want further down
         # shape 为 (feature_map_size[1], feature_map_size[0], 1)
@@ -688,11 +703,15 @@ class SSDInputEncoder:
         # Create a 4D tensor template of shape `(feature_map_height, feature_map_width, n_boxes, 4)`
         # where the last dimension will contain `(cx, cy, w, h)`
         boxes_tensor = np.zeros((feature_map_size[0], feature_map_size[1], n_boxes, 4))
+        # Set cx
         # np.tile() 之后 shape 为 (feature_map_size[1], feature_map_size[0], n_boxes)
-        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, n_boxes))  # Set cx
-        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, n_boxes))  # Set cy
-        boxes_tensor[:, :, :, 2] = wh_list[:, 0]  # Set w
-        boxes_tensor[:, :, :, 3] = wh_list[:, 1]  # Set h
+        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, n_boxes))
+        # Set cy
+        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, n_boxes))
+        # Set w
+        boxes_tensor[:, :, :, 2] = wh_array[:, 0]
+        # Set h
+        boxes_tensor[:, :, :, 3] = wh_array[:, 1]
 
         # Convert `(cx, cy, w, h)` to `(x_min, y_min, x_max, y_max)`
         boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='centroids2corners')
@@ -713,8 +732,8 @@ class SSDInputEncoder:
             boxes_tensor[:, :, :, [0, 2]] /= self.img_width
             boxes_tensor[:, :, :, [1, 3]] /= self.img_height
 
-        # TODO: Implement box limiting directly for `(cx, cy, w, h)`
-        #  so that we don't have to unnecessarily convert back and forth.
+        # TODO: Implement box limiting directly for `(cx, cy, w, h)` so that we don't have to unnecessarily convert back
+        #  and forth.
         if self.coords == 'centroids':
             # Convert `(x_min, y_min, x_max, y_max)` back to `(cx, cy, w, h)`.
             boxes_tensor = convert_coordinates(boxes_tensor,
@@ -729,7 +748,7 @@ class SSDInputEncoder:
                                                border_pixels='half')
 
         if diagnostics:
-            return boxes_tensor, (cy, cx), wh_list, (step_height, step_width), (offset_height, offset_width)
+            return boxes_tensor, (cy, cx), wh_array, (step_height, step_width), (offset_height, offset_width)
         else:
             return boxes_tensor
 

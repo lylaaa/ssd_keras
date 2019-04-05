@@ -1170,7 +1170,6 @@ class DataGenerator:
                                 inverse_transforms.append(inverse_transform)
                             else:
                                 batch_x[i], batch_y[i] = transform(batch_x[i], batch_y[i])
-                                pass
                         else:
                             if ('inverse_transform' in returns) and (
                                     'return_inverter' in inspect.signature(transform).parameters):
@@ -1226,7 +1225,8 @@ class DataGenerator:
                 for j in sorted(batch_items_to_remove, reverse=True):
                     # This isn't efficient, but it hopefully shouldn't need to be done often anyway.
                     batch_x.pop(j)
-                    batch_filenames.pop(j)
+                    if batch_filenames:
+                        batch_filenames.pop(j)
                     if batch_inverse_transforms:
                         batch_inverse_transforms.pop(j)
                     if self.labels:

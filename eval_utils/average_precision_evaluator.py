@@ -112,7 +112,7 @@ class Evaluator:
                  return_recalls=False,
                  return_average_precisions=False,
                  verbose=True,
-                 decoding_confidence_thresh=0.01,
+                 decoding_confidence_thresh=0.5,
                  decoding_iou_threshold=0.45,
                  decoding_top_k=200,
                  decoding_pred_coords='centroids',
@@ -728,7 +728,7 @@ class Evaluator:
                     # Those predictions whose matched overlap is below the threshold become false positives.
                     false_pos[i] = 1
                 else:
-                    if not (ignore_neutral_boxes and eval_neutral_available) or (eval_neutral[gt_match_index] is False):
+                    if not (ignore_neutral_boxes and eval_neutral_available) or (not eval_neutral[gt_match_index]):
                         # If this is not a ground truth that is supposed to be evaluation-neutral
                         # (i.e. should be skipped for the evaluation) or if we don't even have the concept of neutral
                         # boxes.

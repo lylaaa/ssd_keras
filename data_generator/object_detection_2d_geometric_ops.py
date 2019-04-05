@@ -70,10 +70,12 @@ class Resize:
             # Adam
             def inverter(new_labels):
                 old_labels = np.copy(new_labels)
-                old_labels[:, [ymin, ymax]] = np.round(
-                    old_labels[:, [ymin, ymax]] * (img_height / self.out_height), decimals=0)
-                old_labels[:, [xmin, xmax]] = np.round(
-                    old_labels[:, [xmin, xmax]] * (img_width / self.out_width), decimals=0)
+                # 此时 old_labels 的 shape 为 (num_prediction_boxes, 6), (class_id, confidence, xmin, ymin, xmax, ymax)
+                # +1 是因为相比原来的 label 多了一个 confidence
+                old_labels[:, [ymin + 1, ymax + 1]] = np.round(
+                    old_labels[:, [ymin + 1, ymax + 1]] * (img_height / self.out_height), decimals=0)
+                old_labels[:, [xmin + 1, xmax + 1]] = np.round(
+                    old_labels[:, [xmin + 1, xmax + 1]] * (img_width / self.out_width), decimals=0)
                 return old_labels
         else:
             inverter = None
