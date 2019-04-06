@@ -25,13 +25,11 @@ from keras.engine.topology import Layer
 
 class L2Normalization(Layer):
     """
-    Performs L2 normalization on the input tensor with a learnable scaling parameter
-    as described in the paper "Parsenet: Looking Wider to See Better" (see references)
-    and as used in the original SSD model.
+    Performs L2 normalization on the input tensor with a learnable scaling parameter as described in the paper
+    "Parsenet: Looking Wider to See Better" (see references) and as used in the original SSD model.
 
     Arguments:
-        gamma_init (int): The initial scaling parameter. Defaults to 20 following the
-            SSD paper.
+        gamma_init (int): The initial scaling parameter. Defaults to 20 following the SSD paper.
 
     Input shape:
         4D tensor of shape `(batch, channels, height, width)` if `dim_ordering = 'th'`

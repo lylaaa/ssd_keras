@@ -786,8 +786,8 @@ class DataGenerator:
         hdf5_dataset.attrs.create(name='has_labels', data=False, shape=None, dtype=np.bool_)
         hdf5_dataset.attrs.create(name='has_image_ids', data=False, shape=None, dtype=np.bool_)
         hdf5_dataset.attrs.create(name='has_eval_neutral', data=False, shape=None, dtype=np.bool_)
-        # It's useful to be able to quickly check whether the images in a dataset all
-        # have the same size or not, so add a boolean attribute for that.
+        # It's useful to be able to quickly check whether the images in a dataset all have the same size or not,
+        # so add a boolean attribute for that.
         if variable_image_size and not resize:
             hdf5_dataset.attrs.create(name='variable_image_size', data=True, shape=None, dtype=np.bool_)
         else:
@@ -799,6 +799,7 @@ class DataGenerator:
                                                   shape=(dataset_size,),
                                                   # max_shape 表示 dataset 是可以伸缩的
                                                   maxshape=None,
+                                                  # special_dtype 用于表示不定长的数据类型, vlen 指定数据基本类型
                                                   dtype=h5py.special_dtype(vlen=np.uint8))
 
         # Create the dataset that will hold the image heights, widths and channels that
@@ -814,8 +815,8 @@ class DataGenerator:
                                                       shape=(dataset_size,),
                                                       maxshape=None,
                                                       dtype=h5py.special_dtype(vlen=np.int32))
-            # Create the dataset that will hold the dimensions of the labels arrays for
-            # each image so that we can restore the labels from the flattened arrays later.
+            # Create the dataset that will hold the dimensions of the labels arrays for each image so that we can
+            # restore the labels from the flattened arrays later.
             hdf5_label_shapes = hdf5_dataset.create_dataset(name='label_shapes',
                                                             shape=(dataset_size, 2),
                                                             maxshape=(None, 2),
@@ -858,7 +859,7 @@ class DataGenerator:
             with Image.open(self.filenames[i]) as image:
                 image = np.asarray(image, dtype=np.uint8)
                 # Make sure all images end up having three channels.
-                # 且最后一个 axis 的维度为 3
+                # 且最后一个 axis 的长度为 3
                 if image.ndim == 2:
                     image = np.stack([image] * 3, axis=-1)
                 elif image.ndim == 3:
@@ -1257,7 +1258,8 @@ class DataGenerator:
             #########################################################################################
             if (label_encoder is not None) and batch_y:
                 if ('matched_anchors' in returns) and isinstance(label_encoder, SSDInputEncoder):
-                    batch_y_encoded, batch_matched_anchors = label_encoder(batch_y, diagnostics=True)
+                    batch_y_encoded, batch_matched_anchors, avg_iou = label_encoder(batch_y, diagnostics=True)
+                    pass
                 else:
                     batch_y_encoded = label_encoder(batch_y, diagnostics=False)
                     batch_matched_anchors = None

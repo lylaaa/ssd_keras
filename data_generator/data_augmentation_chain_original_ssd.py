@@ -21,9 +21,10 @@ import numpy as np
 import cv2
 import inspect
 
-from data_generator.object_detection_2d_photometric_ops import ConvertColor, ConvertDataType, ConvertTo3Channels, RandomBrightness, RandomContrast, RandomHue, RandomSaturation, RandomChannelSwap
+from data_generator.object_detection_2d_photometric_ops import ConvertColor, ConvertDataType, ConvertTo3Channels, \
+    RandomBrightness, RandomContrast, RandomHue, RandomSaturation, RandomChannelSwap
 from data_generator.object_detection_2d_patch_sampling_ops import PatchCoordinateGenerator, RandomPatch, RandomPatchInf
-from data_generator.object_detection_2d_geometric_ops import ResizeRandomInterp, RandomFlip
+from data_generator.object_detection_2d_geometric_ops import ResizeRandomInterpolation, RandomFlip
 from data_generator.object_detection_2d_image_boxes_validation_utils import BoundGenerator, BoxFilter, ImageValidator
 
 
@@ -215,8 +216,8 @@ class SSDDataAugmentation:
             img_width (int): The desired width of the output images in pixels.
             background (list/tuple, optional): A 3-tuple specifying the RGB color value of the background pixels of the
                 translated images.
-            labels_format (list/tuple, optional): A list/tuple that defines which index in the last axis of the labels
-                of an image. The list contains at least the keywords 'xmin', 'ymin', 'xmax', and 'ymax'.
+            labels_format (list/tuple, optional): A list/tuple that defines what in the last axis of the labels. The
+                list contains at least the keywords 'xmin', 'ymin', 'xmax', and 'ymax'.
         """
 
         self.labels_format = labels_format
@@ -229,21 +230,20 @@ class SSDDataAugmentation:
         # This box filter makes sure that the resized images don't contain any degenerate boxes.
         # Resizing the images could lead the boxes to becomes smaller. For boxes that are already pretty small,
         # that might result in boxes with height and/or width zero, which we obviously cannot allow.
-        # UNCLEAR: 但是 BoxFilter 并没有检查 height,width 是否为 0, 只是检查 xmax > xmin, ymax > ymin
         self.box_filter = BoxFilter(check_overlap=False,
                                     check_min_area=False,
                                     check_degenerate=True,
                                     labels_format=self.labels_format)
 
-        self.resize = ResizeRandomInterp(height=img_height,
-                                         width=img_width,
-                                         interpolation_modes=[cv2.INTER_NEAREST,
-                                                              cv2.INTER_LINEAR,
-                                                              cv2.INTER_CUBIC,
-                                                              cv2.INTER_AREA,
-                                                              cv2.INTER_LANCZOS4],
-                                         box_filter=self.box_filter,
-                                         labels_format=self.labels_format)
+        self.resize = ResizeRandomInterpolation(height=img_height,
+                                                width=img_width,
+                                                interpolation_modes=[cv2.INTER_NEAREST,
+                                                                     cv2.INTER_LINEAR,
+                                                                     cv2.INTER_CUBIC,
+                                                                     cv2.INTER_AREA,
+                                                                     cv2.INTER_LANCZOS4],
+                                                box_filter=self.box_filter,
+                                                labels_format=self.labels_format)
 
         self.sequence = [self.photometric_distortions,
                          self.expand,

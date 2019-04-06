@@ -1,5 +1,6 @@
 from keras.optimizers import Adam, SGD
-from keras.callbacks import ModelCheckpoint, LearningRateScheduler, TerminateOnNaN, CSVLogger
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler, TerminateOnNaN, CSVLogger, ReduceLROnPlateau
+from keras.callbacks import EarlyStopping
 from keras import backend as K
 from keras.models import load_model
 from math import ceil
@@ -15,6 +16,7 @@ from data_generator.object_detection_2d_photometric_ops import ConvertTo3Channel
 from data_generator.data_augmentation_chain_original_ssd import SSDDataAugmentation
 import datetime
 import matplotlib
+import cv2
 
 matplotlib.use('Agg')
 
@@ -122,12 +124,12 @@ val_dataset = DataGenerator(load_images_into_memory=False, hdf5_dataset_path=val
 # VOC_2007_test_image_set_filename = osp.join(DATASET_DIR, 'test/VOC2007/ImageSets/Main/test.txt')
 
 # The XML parser needs to now what object class names to look for and in which order to map them to integers.
-# classes = ['background',
-#            'aeroplane', 'bicycle', 'bird', 'boat',
-#            'bottle', 'bus', 'car', 'cat',
-#            'chair', 'cow', 'diningtable', 'dog',
-#            'horse', 'motorbike', 'person', 'pottedplant',
-#            'sheep', 'sofa', 'train', 'tvmonitor']
+classes = ['background',
+           'aeroplane', 'bicycle', 'bird', 'boat',
+           'bottle', 'bus', 'car', 'cat',
+           'chair', 'cow', 'diningtable', 'dog',
+           'horse', 'motorbike', 'person', 'pottedplant',
+           'sheep', 'sofa', 'train', 'tvmonitor']
 #
 # train_dataset.parse_xml(images_dirs=[VOC_2007_trainval_images_dir,
 #                                      VOC_2012_trainval_images_dir],
@@ -207,13 +209,42 @@ ssd_input_encoder = SSDInputEncoder(img_height=img_height,
 
 train_generator = train_dataset.generate(batch_size=batch_size,
                                          shuffle=True,
-                                         transformations=[ssd_data_augmentation],
+                                         # transformations=[ssd_data_augmentation],
+                                         transformations=[convert_to_3_channels, resize],
                                          label_encoder=ssd_input_encoder,
                                          returns={'processed_images',
+                                                  # 'processed_labels',
                                                   'encoded_labels',
                                                   # 'inverse_transform'
                                                   },
                                          keep_images_without_gt=False)
+
+# test generator
+# colors = [np.random.randint(0, 256, 3).tolist() for i in range(len(classes))]
+# for batch_processed_images, batch_processed_labels in train_generator:
+#     batch_size = batch_processed_images.shape[0]
+#     for i in range(batch_size):
+#         image = batch_processed_images[i]
+#         processed_labels = batch_processed_labels[i]
+#         for processed_label in processed_labels:
+#             class_id = int(processed_label[0])
+#             class_name = classes[class_id]
+#             xmin = processed_label[1]
+#             ymin = processed_label[2]
+#             xmax = processed_label[3]
+#             ymax = processed_label[4]
+#             label = '{}'.format(class_name)
+#             color = colors[class_id - 1]
+#             # ret[0] 表示包围 text 的矩形框的 width
+#             # ret[1] 表示包围 text 的矩形框的 height
+#             # baseline 表示的 text 最底下一个像素到文本 baseline 的距离
+#             # 文本 baseline 参考 https://blog.csdn.net/u010970514/article/details/84075776
+#             ret, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+#             cv2.rectangle(image, (xmin, ymin), (xmax, ymax), color, 1)
+#             cv2.rectangle(image, (xmin, ymax - ret[1] - baseline), (xmin + ret[0], ymax), color, -1)
+#             cv2.putText(image, label, (xmin, ymax - baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+#         cv2.imshow('image', image)
+#         cv2.waitKey(0)
 
 val_generator = val_dataset.generate(batch_size=batch_size,
                                      shuffle=False,
@@ -233,9 +264,9 @@ print("Number of images in the validation dataset:\t{:>6}".format(val_dataset_si
 
 # Define a learning rate schedule.
 def lr_schedule(epoch):
-    if epoch < 80:
+    if epoch < 60:
         return 0.001
-    elif epoch < 100:
+    elif epoch < 80:
         return 0.0001
     else:
         return 0.00001
@@ -257,11 +288,16 @@ csv_logger = CSVLogger(filename='ssd300_pascal_07+12_training_log.csv',
 learning_rate_scheduler = LearningRateScheduler(schedule=lr_schedule,
                                                 verbose=1)
 
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=6, verbose=1)
+
 terminate_on_nan = TerminateOnNaN()
+early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
 callbacks = [model_checkpoint,
              csv_logger,
-             learning_rate_scheduler,
+             early_stopping,
+             # learning_rate_scheduler,
+             reduce_lr,
              terminate_on_nan]
 
 # If you're resuming a previous training, set `initial_epoch` and `final_epoch` accordingly.

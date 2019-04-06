@@ -79,6 +79,7 @@ class Resize:
                 return old_labels
         else:
             inverter = None
+
         if labels is None:
             if return_inverter:
                 return image, labels, inverter
@@ -100,7 +101,7 @@ class Resize:
                 return image, labels
 
 
-class ResizeRandomInterp:
+class ResizeRandomInterpolation:
     """
     Resize images to a specified height and width in pixels using a randomly selected interpolation mode.
     """

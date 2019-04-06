@@ -341,30 +341,31 @@ class SSDInputEncoder:
         # anchor boxes will have the shape `(feature_map_height, feature_map_width, n_boxes, 4)`.
 
         # This will store the anchor boxes for each predictor layer.
-        self.boxes_list = []
+        self.boxes_per_layer = []
 
         # The following lists just store diagnostic information. Sometimes it's handy to have the anchor boxes'
         # center points, heights, widths, etc. in a list.
 
         # Anchor box center points as `(cy, cx)` for each predictor layer
-        self.centers_diag = []
+        self.centers_per_layer = []
         # Anchor box widths and heights for each predictor layer
-        self.wh_list_diag = []
+        self.whs_per_layer = []
         # Horizontal and vertical distances between any two boxes for each predictor layer
-        self.steps_diag = []
+        self.steps_per_layer = []
         # Offsets for each predictor layer
-        self.offsets_diag = []
+        self.offsets_per_layer = []
 
         # Iterate over all predictor layers and compute the anchor boxes for each one.
         for i in range(len(self.predictor_sizes)):
             # boxes 为 np.array, shape 为 (predictor_sizes[i][0], predictor_sizes[i][1], self.n_boxes[i], 4)
-            # center 为 tuple, 有两个 np.array 类型的元素, 每个元素的 shape 为 (predictor_sizes[i][0], predictor_sizes[i][1])
-            # wh 为 np.array, shape 为 (self.n_boxes, 2), 第一个元素表示 anchor 的 width, 第二个元素表示 anchor 的 height
-            # step 为 tuple, 有两个 int/float 类型的元素, 第一个元素表示是竖直方向上两个 anchor 的中心点的距离, 第二个
-            #  元素表示水平方向上两个 anchor 中心点的距离
+            # center 为 tuple, 有两个 np.array 类型的元素, (cx, cy) cx 的 shape 为 (predictor_sizes[i][1], )
+            #   cy 的 shape 为 (predictor_sizes[i][1], )
+            # wh 为 np.array, shape 为 (self.n_boxes, 2), 最后一维第一个元素表示 anchor 的 width, 第二个元素表示 anchor 的 height
+            # step 为 tuple, 有两个 int/float 类型的元素, 第一个元素表示是竖直方向上两个 anchor 的中心点的距离, 第二个元素表示水平方向
+            #   上两个 anchor 中心点的距离
             # offset 为 tuple, 有两个 float 类型的元素, 第一个元素表示最左上方的 anchor 的中心点 y 坐标(以 step[0] 的 fraction 表示),
             # 第二个元素表示 anchor 中心点 x 坐标(以 step[1] 的 fraction 表示)
-            boxes, center, wh, step, offset = self.generate_anchor_boxes_for_layer(
+            boxes, centers, whs, steps, offsets = self.generate_anchor_boxes_for_layer(
                 feature_map_size=self.predictor_sizes[i],
                 aspect_ratios=self.aspect_ratios[i],
                 this_scale=self.scales[i],
@@ -373,17 +374,30 @@ class SSDInputEncoder:
                 this_offsets=self.offsets[i],
                 n_boxes=self.n_boxes[i],
                 diagnostics=True)
-            self.boxes_list.append(boxes)
-            self.centers_diag.append(center)
-            self.wh_list_diag.append(wh)
-            self.steps_diag.append(step)
-            self.offsets_diag.append(offset)
+            self.boxes_per_layer.append(boxes)
+            self.centers_per_layer.append(centers)
+            self.whs_per_layer.append(whs)
+            self.steps_per_layer.append(steps)
+            self.offsets_per_layer.append(offsets)
 
     def __call__(self, ground_truth_labels,
                  labels_format=('class_id', 'xmin', 'ymin', 'xmax', 'ymax'),
                  diagnostics=False):
         """
         Converts ground truth bounding box data into a suitable format to train an SSD model.
+
+        通过 generate_encoding_template 创建 y_encode, (batch_size, num_anchor_boxes, num_classes + 12)
+        遍历一个 batch 的 ground_truth_labels
+            计算当前 batch_item 的 gt_boxes 和 y_encode 中 anchor_boxes 的 iou
+            先为每个 gt_box 找到和其有最大 iou 的 anchor_box, 认为该 anchor_box 是 positive 的
+                在 y_encode 中 anchor_box 的相应位置设置 gt_box 的坐标和 class_id
+            然后剩余的 anchor_boxes 中, 找和其有最大 iou 的 gt_box,
+                如果 iou > pos_threshold, 认为该 anchor_box 是 positive 的
+                    在 y_encode 中 anchor_box 的相应位置设置 gt_box 的坐标和 class_id
+                如果 iou < nes_threshold, 认为该 anchor_box 是 negative 的, 不要动,
+                    因为 y_encode 初始化时所有的 anchor_boxes 的 one-hot classes 的第 self.background_id=0 个位置为 1
+                如果 nes_threshold < iou < pos_threshold, 认为该 anchor_box 是 neutral 的
+                    在 y_encode 中 anchor_box 的相应位置设置坐标和 one-hot classes 都为 0
 
         Arguments:
             ground_truth_labels (list): (batch_size, num_gt_boxes, 5)
@@ -413,26 +427,33 @@ class SSDInputEncoder:
         ymin = labels_format.index('ymin')
         xmax = labels_format.index('xmax')
         ymax = labels_format.index('ymax')
-        # Note 这里的 `ground_truth_labels` 是一个 list
-        # 每一个元素是一个 np.array, 表示一个 batch_item 的 gt_boxes
+        # Note 这里的 `ground_truth_labels` 是一个 list, 在 generate() 调用时传递的 batch_y
+        # 每一个元素是一个 np.array, 表示一个 batch_item 的 gt_boxes 的坐标和 class_id
         batch_size = len(ground_truth_labels)
+
+        # Adam for diagnostics
+        # 用来表示每个 batch_item 的 gt_boxes 和与其有最大 iou 的 anchor_box 的最大 iou 的平均值, 也就是 bipartite_match 的结果
+        batch_avg_iou = np.zeros(batch_size)
 
         ##################################################################################
         # Generate the template for y_encoded.
         ##################################################################################
-        # shape 为 (batch_size, total_num_boxes, num_classes + 12), 元素都为 0
+
+        # shape 为 (batch_size, total_num_boxes, num_classes + 12)
         y_encoded = self.generate_encoding_template(batch_size=batch_size, diagnostics=False)
 
         ##################################################################################
         # Match ground truth boxes to anchor boxes.
         ##################################################################################
-        # Every anchor box that does not have a ground truth match and
-        # for which the maximal IoU overlap with any ground truth box is less than or
-        # equal to `neg_iou_limit` will be a negative (background) box.
+
+        # Every anchor box that does not have a ground truth match and for which the maximal IoU overlap with any ground
+        # truth box is less than or equal to `neg_iou_limit` will be a negative (background) box.
 
         # All boxes are background boxes by default.
         y_encoded[:, :, self.background_id] = 1
         # An identity matrix that we'll use as one-hot class vectors
+        # 等确定了 anchor_box match 的 gt_box 的 class_id, 就从中去相应的一行, 覆盖掉 y_encoded[:, :, :num_classes] 中相应行的值
+        # 比较巧妙
         class_vectors = np.eye(self.n_classes)
 
         # For each batch item...
@@ -441,8 +462,7 @@ class SSDInputEncoder:
             # 这种情况应该只发生在 generator.keep_images_without_gt == True
             if ground_truth_labels[i].size == 0:
                 continue
-            # The labels for this batch item
-            # (num_gt_boxes, 5)
+            # The labels for this batch item, shape 为 (num_gt_boxes, 5)
             labels = ground_truth_labels[i].astype(np.float)
 
             # Check for degenerate ground truth bounding boxes before attempting any computations.
@@ -484,10 +504,11 @@ class SSDInputEncoder:
             ##################################################################################
             # Match anchors and gt_boxes
             ##################################################################################
+
             # 1. Compute the IoU similarities between all anchor boxes and all ground truth boxes for this batch item.
-            # labels[: [xmin, ymin, xmax, ymax]] 的 shape 为 (num_ground_truth_boxes, 4)
+            # labels[: [xmin, ymin, xmax, ymax]] 的 shape 为 (num_gt_boxes, 4)
             # y_encoded[i, :, -12:-8] 的 shape 为 (num_anchor_boxes, 4)
-            # similarities 的 shape 为 (num_ground_truth_boxes, num_anchor_boxes)
+            # similarities 的 shape 为 (num_gt_boxes, num_anchor_boxes)
             similarities = iou(labels[:, [xmin, ymin, xmax, ymax]], y_encoded[i, :, -12:-8],
                                coords=self.coords,
                                mode='outer_product',
@@ -495,7 +516,6 @@ class SSDInputEncoder:
 
             # 2: Do bipartite matching, i.e. match each ground truth box to the one anchor box with the highest IoU.
             #   This ensures that each ground truth box will have at least one good match.
-
             # For each ground truth box, get the anchor box to match with it.
             # shape 为 (num_gt_boxes,), 每个元素表示与该 gt_box 有最大 iou 的 anchor_box 的 id
             bipartite_matches = match_bipartite_greedy(weight_matrix=similarities)
@@ -504,7 +524,11 @@ class SSDInputEncoder:
             # 在每个对应的 anchor_box 上设置 label 值
             y_encoded[i, bipartite_matches, :-8] = labels_one_hot
 
+            # Adam for diagnostics
+            batch_avg_iou[i] = np.mean(similarities[list(range(len(bipartite_matches))), bipartite_matches])
+
             # Set the columns of the matched anchor boxes to zero to indicate that they were matched.
+            # 在已经 match 过的 anchor_box 的列上设置 0
             similarities[:, bipartite_matches] = 0
 
             # 3: Maybe do 'multi' matching, where each remaining anchor box will be matched to its most similar
@@ -513,13 +537,11 @@ class SSDInputEncoder:
 
             if self.matching_type == 'multi':
                 # Get all matches that satisfy the IoU threshold.
-                # matches[0] 表示所有满足条件的 anchor_box 对应的 gt_box 的 id
-                # matches[1] 表示所有满足条件的 anchor_box 的 id
+                # matches[0] 表示所有 positive_anchor_box 对应的 gt_box 的 id
+                # matches[1] 表示所有 positive_anchor_box 的 id
                 matches = match_multi(weight_matrix=similarities, threshold=self.pos_iou_threshold)
-
                 # Write the ground truth data to the matched anchor boxes.
                 y_encoded[i, matches[1], :-8] = labels_one_hot[matches[0]]
-
                 # Set the columns of the matched anchor boxes to zero to indicate that they were matched.
                 similarities[:, matches[1]] = 0
 
@@ -528,6 +550,7 @@ class SSDInputEncoder:
             #   i.e. they will no longer be background boxes. These anchors are "too close" to a
             #   ground truth box to be valid background boxes.
 
+            # (num_anchor_boxes, )
             max_background_similarities = np.amax(similarities, axis=0)
             neutral_boxes_indices = np.nonzero(max_background_similarities >= self.neg_iou_limit)[0]
             # 那么 neutral_boxes 的 class_one_hot 全为 0, 不属于任何 class
@@ -539,6 +562,7 @@ class SSDInputEncoder:
         # Convert box coordinates to anchor box offsets.
         ##################################################################################
 
+        # 经过下面的运算所有 neutral_anchor_boxes 和 negative_anchor_boxes 的 [-12:-8] 都是 0
         if self.coords == 'centroids':
             # cx(gt) - cx(anchor), cy(gt) - cy(anchor)
             y_encoded[:, :, [-12, -11]] -= y_encoded[:, :, [-8, -7]]
@@ -575,8 +599,9 @@ class SSDInputEncoder:
             y_matched_anchors = np.copy(y_encoded)
             # Keeping the anchor box coordinates means setting the offsets to zero.
             # 因为 y_encoded[:, :, -12:-8] 现在表示的都是 delta 值
+            # UNCLEAR: 有什么用啊?
             y_matched_anchors[:, :, -12:-8] = 0
-            return y_encoded, y_matched_anchors
+            return y_encoded, y_matched_anchors, np.mean(batch_avg_iou)
         else:
             return y_encoded
 
@@ -597,6 +622,8 @@ class SSDInputEncoder:
         # 然后根据 this_scale 和 next_scale 算出各种 ap 的 anchor_boxes 的 width, height
         # 根据 this_steps 和 this_offsets 算出最左上方的 anchor_box 的中心点的 x, y 坐标
         # 推算出 (feature_map_size[0], feature_map_size[1]) 个 anchor_boxes 的中心点的坐标
+        # 有了 cx, cy, w, h 可以计算出 self.coords 想要的值, 作为返回的 anchor_boxes 的最后一维的值
+        # 最后返回的 anchor_boxes 的 shape 就是 (feature_map_size[0], feature_map_size[1], num_boxes, 4)
         Arguments:
             feature_map_size (list/tuple): A list or tuple `[feature_map_height, feature_map_width]` with the spatial
                 dimensions of the feature map for which to generate the anchor boxes.
@@ -650,6 +677,7 @@ class SSDInputEncoder:
         ##################################################################################
         # Compute the grid of box center points. They are identical for all aspect ratios.
         ##################################################################################
+
         # 1. Compute the step sizes
         # i.e. how far apart the anchor box center points will be vertically and horizontally.
         if this_steps is None:
@@ -758,6 +786,7 @@ class SSDInputEncoder:
 
         Note that all tensor creation, reshaping and concatenation operations performed in this function
          and the sub-functions it calls are identical to those performed inside the SSD model.
+         意思是这里的 numpy 操作 np.array 和模型中 tf 操作 tensor, 相同的操作, 相同的结果
         This, of course, must be the case in order to preserve the spatial meaning of each box prediction, but
         it's useful to make yourself aware of this fact and why it is necessary.
 
@@ -765,10 +794,17 @@ class SSDInputEncoder:
         positions and scales of the boxes predicted by the model. The sequence of operations here ensures that
         `y_encoded` has this specific form.
 
+        首先把所有 feature_map 上的 anchor boxes 组成起来, 生成 shape 为 (batch_size, total_num_boxes, 4) 的 box_tensor
+        再构建 class_tensor 的空白数组, 用于存放 one-hot 形式的 ground truth, shape 为 (batch_size, total_num_boxes, num_classes)
+        再构建 variance_tensor, 用 self.variance 来初始化, shape 为 (batch_size, total_num_boxes, 4)
+        最后连接 (class_tensor, box_tensor, box_tensor, variance tensor),
+            shape 为 (batch_size, total_num_boxes, num_classes + 4 + 4 + 4)
+        Note 第一个 box_tensor 后面会被 gt_boxes 覆盖, 而第二个 box_tensor 正好可以和 gt_boxes 计算 delta
+
         Arguments:
             batch_size (int): The batch size.
-            diagnostics (bool, optional): See the documentation for `generate_anchor_boxes()`. The diagnostic output
-                here is similar, just for all predictor conv layers.
+            diagnostics (bool, optional): See the documentation for `generate_anchor_boxes_for_layer()`. The diagnostic
+                output here is similar, just for all predictor convolutional layers.
 
         Returns:
             A Numpy array of shape `(batch_size, #boxes, #classes + 12)`, the template into which to encode
@@ -778,20 +814,20 @@ class SSDInputEncoder:
         """
         # Tile the anchor boxes for each predictor layer across all batch items.
         batch_boxes = []
-        # boxes_list 是一个 list
+        # boxes_per_layer 是一个 list
         # 每一个元素是一个 np.array, shape 为 (feature_map_height, feature_map_width, n_boxes, 4)
         # 表示一个 feature_map 上的所有的 anchor_box 的坐标(具体的值取决于 self.coords)
-        for boxes in self.boxes_list:
-            # Prepend one dimension to `self.boxes_list` to account for the batch size and tile it along.
+        for boxes in self.boxes_per_layer:
+            # Prepend one dimension to `self.boxes_per_layer` to account for the batch size and tile it along.
             # The result will be a 5D tensor of shape `(batch_size, feature_map_height, feature_map_width, n_boxes, 4)`
             boxes = np.expand_dims(boxes, axis=0)
             boxes = np.tile(boxes, (batch_size, 1, 1, 1, 1))
 
             # Now reshape the 5D tensor above into a 3D tensor of shape
-            # `(batch, feature_map_height * feature_map_width * n_boxes, 4)`. The resulting order of the tensor content
-            # will be identical to the order obtained from the reshaping operation in our Keras model
-            # (we're using the Tensorflow backend, and tf.reshape() and np.reshape()
-            # use the same default index order, which is C-like index ordering)
+            # `(batch, feature_map_height * feature_map_width * n_boxes, 4)`.
+            # Note the resulting order of the tensor content will be identical to the order obtained from the reshaping
+            #  operation in our Keras model (we're using the Tensorflow backend, and tf.reshape() and np.reshape() use
+            #  the same default index order, which is C-like index ordering)
             boxes = np.reshape(boxes, (batch_size, -1, 4))
             batch_boxes.append(boxes)
 
@@ -799,8 +835,10 @@ class SSDInputEncoder:
         # shape 为 (batch_size, total_num_boxes, 4)
         boxes_tensor = np.concatenate(batch_boxes, axis=1)
 
-        # Create a template tensor to hold the one-hot class encodings of shape `(batch, #boxes, #classes)`
+        # Create a template tensor to hold the one-hot class encodings of shape
+        # `(batch_size, total_num_boxes, num_classes)`
         # It will contain all zeros for now, the classes will be set in the matching process that follows
+        # 这里的 self.n_classes 是包含 background 的
         classes_tensor = np.zeros((batch_size, boxes_tensor.shape[1], self.n_classes))
 
         # Create a tensor to contain the variances. This tensor has the same shape as `boxes_tensor` and simply
@@ -810,14 +848,15 @@ class SSDInputEncoder:
         variances_tensor += self.variances
 
         # Concatenate the classes, boxes and variances tensors to get our final template for y_encoded.
-        # We also need another tensor of the shape of `boxes_tensor` as a space filler
-        # so that `y_encoding_template` has the same shape as the SSD model output tensor.
+        # We also need another tensor of the shape of `boxes_tensor` as a space filler so that `y_encoding_template`
+        # has the same shape as the SSD model output tensor.
         # The content of this tensor is irrelevant, we'll just use `boxes_tensor` a second time.
         # shape 为 (batch_size, total_num_boxes, num_classes + 4 + 4 + 4)
         y_encoding_template = np.concatenate((classes_tensor, boxes_tensor, boxes_tensor, variances_tensor), axis=2)
 
         if diagnostics:
-            return y_encoding_template, self.centers_diag, self.wh_list_diag, self.steps_diag, self.offsets_diag
+            return (y_encoding_template, self.centers_per_layer, self.whs_per_layer, self.steps_per_layer,
+                    self.offsets_per_layer)
         else:
             return y_encoding_template
 

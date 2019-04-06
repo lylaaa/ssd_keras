@@ -403,6 +403,7 @@ class Evaluator:
             # be decoded and filtered, otherwise that's already taken care of.
             if self.model_mode == 'training':
                 # Decode.
+                # y_pred 是一个 list, 每一个元素表示每一个 batch_item 上的 predictions
                 y_pred = decode_detections(y_pred,
                                            confidence_thresh=decoding_confidence_thresh,
                                            iou_threshold=decoding_iou_threshold,

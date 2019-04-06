@@ -39,20 +39,21 @@ def greedy_nms(y_pred_decoded, iou_threshold=0.45, coords='corners', border_pixe
             For a given batch size `n` this is a list of length `n` where each list element is a 2D Numpy array.
             For a batch item with `k` predicted boxes this 2D Numpy array has shape `(k, 6)`, where each row contains
             the coordinates of the respective box in the format `[class_id, score, xmin, xmax, ymin, ymax]`.
-            Technically, the number of columns doesn't have to be 6, it can be arbitrary as long as the first four
-            elements of each row are `xmin`, `xmax`, `ymin`, `ymax` (in this order) and the last element is the score
-            assigned to the prediction.
+            Technically, the number of columns doesn't have to be 6, it can be arbitrary as long as there are five
+            elements of each row that represents `xmin`, `xmax`, `ymin`, `ymax` (in this order) and the score assigned
+            to the prediction.
             Note that this function is agnostic to the scale of the score or what it represents.
-        iou_threshold (float, optional): All boxes with a Jaccard similarity of
-            greater than `iou_threshold` with a locally maximal box will be removed
-            from the set of predictions, where 'maximal' refers to the box score.
-        coords (str, optional): The coordinate format of `y_pred_decoded`.
-            Can be one of the formats supported by `iou()`.
-        border_pixels (str, optional): How to treat the border pixels of the bounding boxes.
-            Can be 'include', 'exclude', or 'half'. If 'include', the border pixels belong
-            to the boxes. If 'exclude', the border pixels do not belong to the boxes.
-            If 'half', then one of each of the two horizontal and vertical borders belong
-            to the boxes, but not the other.
+        iou_threshold (float, optional): All boxes with a Jaccard similarity of greater than `iou_threshold` with a
+            locally maximal box will be removed from the set of predictions, where 'maximal' refers to the box score.
+            用于过滤和 local maximum 比较近似的其他 predictions
+        coords (str, optional): The coordinate format of `y_pred_decoded`. Can be one of the formats supported by
+            `iou()`.
+        border_pixels (str, optional): How to treat the border pixels of the bounding boxes. Can be 'include', 'exclude'
+            , or 'half'.
+            If 'include', the border pixels belong to the boxes.
+            If 'exclude', the border pixels do not belong to the boxes.
+            If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
+            other.
 
     Returns:
         The predictions after removing non-maxima. The format is the same as the input format.
@@ -94,7 +95,8 @@ def _greedy_nms(predictions, iou_threshold=0.45, coords='corners', border_pixels
     function for per-class NMS in `decode_detections()`.
 
     Args:
-        predictions: (np.array) 某个 batch_item 的 某个 class 的所有 confident prediction.
+        predictions: (np.array) 某个 batch_item 的 某个 class 的所有 confident prediction(大于阈值的所有 prediction).
+            shape 为 (num_conf_prediction, 5), 最后一维度的元素表示 confidence, xmin, ymin, xmax, ymax
     """
     boxes_left = np.copy(predictions)
     # This is where we store the boxes that make it through the non-maximum suppression
@@ -103,7 +105,7 @@ def _greedy_nms(predictions, iou_threshold=0.45, coords='corners', border_pixels
     while boxes_left.shape[0] > 0:
         # get the index of the next box with the highest confidence...
         maximum_index = np.argmax(boxes_left[:, 0])
-        # copy that box and
+        # copy that box
         maximum_box = np.copy(boxes_left[maximum_index])
         # append it to `maxima` because we'll definitely keep it
         maxima.append(maximum_box)
@@ -128,15 +130,28 @@ def _greedy_nms2(predictions, iou_threshold=0.45, coords='corners', border_pixel
     function in `decode_detections_fast()`.
     """
     boxes_left = np.copy(predictions)
-    maxima = [] # This is where we store the boxes that make it through the non-maximum suppression
-    while boxes_left.shape[0] > 0: # While there are still boxes left to compare...
-        maximum_index = np.argmax(boxes_left[:,1]) # ...get the index of the next box with the highest confidence...
-        maximum_box = np.copy(boxes_left[maximum_index]) # ...copy that box and...
-        maxima.append(maximum_box) # ...append it to `maxima` because we'll definitely keep it
-        boxes_left = np.delete(boxes_left, maximum_index, axis=0) # Now remove the maximum box from `boxes_left`
-        if boxes_left.shape[0] == 0: break # If there are no boxes left after this step, break. Otherwise...
-        similarities = iou(boxes_left[:,2:], maximum_box[2:], coords=coords, mode='element-wise', border_pixels=border_pixels) # ...compare (IoU) the other left over boxes to the maximum box...
-        boxes_left = boxes_left[similarities <= iou_threshold] # ...so that we can remove the ones that overlap too much with the maximum box
+    # This is where we store the boxes that make it through the non-maximum suppression
+    maxima = []
+    # While there are still boxes left to compare...
+    while boxes_left.shape[0] > 0:
+        # get the index of the next box with the highest confidence
+        maximum_index = np.argmax(boxes_left[:, 1])
+        # copy that box
+        maximum_box = np.copy(boxes_left[maximum_index])
+        # append it to `maxima` because we'll definitely keep it
+        maxima.append(maximum_box)
+        # Now remove the maximum box from `boxes_left`
+        boxes_left = np.delete(boxes_left, maximum_index, axis=0)
+        # If there are no boxes left after this step, break. Otherwise...
+        if boxes_left.shape[0] == 0:
+            break
+        # compare (IoU) the other left over boxes to the maximum box
+        similarities = iou(boxes_left[:, 2:], maximum_box[2:],
+                           coords=coords,
+                           mode='element-wise',
+                           border_pixels=border_pixels)
+        # so that we can remove the ones that overlap too much with the maximum box
+        boxes_left = boxes_left[similarities <= iou_threshold]
     return np.array(maxima)
 
 
@@ -187,7 +202,7 @@ def decode_detections(y_pred,
         img_height (int, optional): The height of the input images. Only needed if `normalize_coords` is `True`.
         img_width (int, optional): The width of the input images. Only needed if `normalize_coords` is `True`.
         border_pixels (str, optional): How to treat the border pixels of the bounding boxes. Can be 'include', 'exclude'
-            , or 'half'.
+            , or 'half'. 这个值其实是在 _greedy_nms 中计算 iou 是用了一下, 在 denormalize 使用的是 'half'
             If 'include', the border pixels belong to the boxes.
             If 'exclude', the border pixels do not belong to the boxes.
             If 'half', then one of each of the two horizontal and vertical borders belong to the boxes, but not the
@@ -209,9 +224,12 @@ def decode_detections(y_pred,
     y_pred_decoded_raw = np.copy(y_pred[:, :, :-8])
 
     if input_coords == 'centroids':
+        # y_pred_decoded_raw[:, :, [-2, -1]] 的值为 ln(w(gt) / w(anchor)) / w_variance, ln(h(pred)/h(anchor)) / h_variance
+        # y_pred[:, :, [-2, -1]] 的值为 w_variance, h_variance
         # exp(ln(w(pred)/w(anchor)) / w_variance * w_variance) == w(pred) / w(anchor),
         # exp(ln(h(pred)/h(anchor)) / h_variance * h_variance) == h(pred) / h(anchor)
         y_pred_decoded_raw[:, :, [-2, -1]] = np.exp(y_pred_decoded_raw[:, :, [-2, -1]] * y_pred[:, :, [-2, -1]])
+        # y_pred[[:, :, [-6, -5]] 的值为 w(anchor) 和 h(anchor)
         # (w(pred) / w(anchor)) * w(anchor) == w(pred)
         # (h(pred) / h(anchor)) * h(anchor) == h(pred)
         y_pred_decoded_raw[:, :, [-2, -1]] *= y_pred[:, :, [-6, -5]]
@@ -265,10 +283,12 @@ def decode_detections(y_pred,
     n_classes = y_pred_decoded_raw.shape[-1] - 4
 
     # Store the final predictions in this list
+    # y_pred_decoded 的每一个元素表示一个 batch_item 上所有经过极大值抑制过滤后的所有类的 predictions, 最多不超过 top_k 个
     y_pred_decoded = []
     # `batch_item` has shape `[n_boxes, n_classes + 4 coords]`
     for batch_item in y_pred_decoded_raw:
         # Store the final predictions for this batch item here
+        # pred 的每一个元素表示当前 batch_item 属于某个 class 的所有经过极大值抑制过滤后的 predictions
         pred = []
         # For each class except the background class (which has class ID 0)...
         for class_id in range(1, n_classes):
@@ -300,9 +320,9 @@ def decode_detections(y_pred,
             # If we have more than `top_k` results left at this point, otherwise there is nothing to filter
             if top_k != 'all' and pred.shape[0] > top_k:
                 # get the indices of the `top_k` highest-score maxima
-                # 返回一个 indices 数组, 第 kth 个数就是第 k 大的数的下标,
-                # 0:k-1 的下标表示的数都小于第 k 个下标表示的数
-                # k+1: 的下标表示的数都大于第 k 个下标表示的数
+                # 返回一个 indices 数组, 第 kth 个数就是第 kth 大的数的下标,
+                # 0:kth-1 的下标表示的数都小于第 k 个下标表示的数
+                # kth+1: 的下标表示的数都大于第 k 个下标表示的数
                 top_k_indices = np.argpartition(pred[:, 1], kth=pred.shape[0]-top_k, axis=0)[pred.shape[0]-top_k:]
                 # and keep only those entries of `pred`
                 pred = pred[top_k_indices]
@@ -325,12 +345,13 @@ def decode_detections_fast(y_pred,
                            img_width=None,
                            border_pixels='half'):
     """
-    Convert model prediction output back to a format that contains only the positive box predictions
-    (i.e. the same format that `enconde_y()` takes as input).
+    Convert model prediction output back to a format that contains only the positive box predictions (i.e. the same
+    format that `enconde_y()` takes as input).
 
     Optionally performs confidence thresholding and greedy non-maximum suppression after the decoding stage.
 
-    Note that the decoding procedure used here is not the same as the procedure used in the original Caffe implementation.
+    Note that the decoding procedure used here is not the same as the procedure used in the original Caffe
+     implementation.
     For each box, the procedure used here assigns the box's highest confidence as its predicted class. Then it removes
     all boxes for which the highest confidence is the background class. This results in less work for the subsequent
     non-maximum suppression, because the vast majority of the predictions will be filtered out just by the fact that
@@ -338,15 +359,15 @@ def decode_detections_fast(y_pred,
     implementation, but the results may also differ.
 
     Arguments:
-        y_pred (array): The prediction output of the SSD model, expected to be a Numpy array
-            of shape `(batch_size, #boxes, #classes + 4 + 4 + 4)`, where `#boxes` is the total number of
-            boxes predicted by the model per image and the last axis contains
-            `[one-hot vector for the classes, 4 predicted coordinate offsets, 4 anchor box coordinates, 4 variances]`.
+        y_pred (np.array): The prediction output of the SSD model, expected to be a Numpy array of shape
+            `(batch_size, #boxes, #classes + 4 + 4 + 4)`, where `#boxes` is the total number of boxes predicted by the
+            model per image and the last axis contains `[one-hot vector for the classes, 4 predicted coordinate offsets,
+            4 anchor box coordinates, 4 variances]`.
         confidence_thresh (float, optional): A float in [0,1), the minimum classification confidence in any positive
-            class required for a given box to be considered a positive prediction. A lower value will result
-            in better recall, while a higher value will result in better precision. Do not use this parameter with the
-            goal to combat the inevitably many duplicates that an SSD will produce, the subsequent non-maximum suppression
-            stage will take care of those.
+            class required for a given box to be considered a positive prediction. A lower value will result in better
+            recall, while a higher value will result in better precision. Do not use this parameter with the goal to
+            combat the inevitably many duplicates that an SSD will produce, the subsequent non-maximum suppression stage
+            will take care of those.
         iou_threshold (float, optional): `None` or a float in [0,1]. If `None`, no non-maximum suppression will be
             performed. If not `None`, greedy NMS will be performed after the confidence thresholding stage, meaning
             all boxes with a Jaccard similarity of greater than `iou_threshold` with a locally maximal box will be removed
@@ -428,6 +449,7 @@ def decode_detections_fast(y_pred,
 
 # The functions below are for debugging, so you won't normally need them. That is,
 # unless you need to debug your model, of course.
+
 
 def decode_detections_debug(y_pred,
                             confidence_thresh=0.01,
@@ -575,6 +597,7 @@ def _greedy_nms_debug(predictions, iou_threshold=0.45, coords='corners', border_
         boxes_left = boxes_left[similarities <= iou_threshold] # ...so that we can remove the ones that overlap too much with the maximum box
     return np.array(maxima)
 
+
 def get_num_boxes_per_pred_layer(predictor_sizes, aspect_ratios, two_boxes_for_ar1):
     """
     Returns a list of the number of boxes that each predictor layer predicts.
@@ -590,6 +613,7 @@ def get_num_boxes_per_pred_layer(predictor_sizes, aspect_ratios, two_boxes_for_a
             num_boxes_per_pred_layer.append(predictor_sizes[i][0] * predictor_sizes[i][1] * len(aspect_ratios[i]))
     return num_boxes_per_pred_layer
 
+
 def get_pred_layers(y_pred_decoded, num_boxes_per_pred_layer):
     """
     For a given prediction tensor decoded with `decode_detections_debug()`, returns a list
@@ -599,7 +623,7 @@ def get_pred_layers(y_pred_decoded, num_boxes_per_pred_layer):
     for a given prediction.
 
     Arguments:
-        y_pred_decoded (array): The decoded model output tensor. Must have been
+        y_pred_decoded (np.array): The decoded model output tensor. Must have been
             decoded with `decode_detections_debug()` so that it contains the internal box index
             for each predicted box.
         num_boxes_per_pred_layer (list): A list that contains the total number
@@ -611,7 +635,9 @@ def get_pred_layers(y_pred_decoded, num_boxes_per_pred_layer):
         pred_layers = []
         for prediction in batch_item:
             if (prediction[0] < 0) or (prediction[0] >= cum_boxes_per_pred_layer[-1]):
-                raise ValueError("Box index is out of bounds of the possible indices as given by the values in `num_boxes_per_pred_layer`.")
+                raise ValueError(
+                    "Box index is out of bounds of the possible indices"
+                    "as given by the values in `num_boxes_per_pred_layer`.")
             for i in range(len(cum_boxes_per_pred_layer)):
                 if prediction[0] < cum_boxes_per_pred_layer[i]:
                     pred_layers.append(i)

@@ -373,6 +373,7 @@ def ssd_300(image_size,
                      name='conv1_2')(conv1_1)
     # padding='same' 仍然会改变 feature map 的大小, 因为是否改变 feature_map 的大小是由 stride 决定的
     # 参考 https://www.imooc.com/article/73051
+    # 参考 https://www.tensorflow.org/api_docs/python/tf/nn/convolution 的 Return 部分
     pool1 = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same', name='pool1')(conv1_2)
 
     conv2_1 = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal',
@@ -454,9 +455,6 @@ def ssd_300(image_size,
                      kernel_regularizer=l2(l2_reg),
                      name='conv9_2')(conv9_1)
 
-    m = Model(input=x, output=conv9_2)
-    m.summary()
-
     # Feed conv4_3 into the L2 normalization layer
     conv4_3_norm = L2Normalization(gamma_init=20, name='conv4_3_norm')(conv4_3)
 
@@ -464,8 +462,8 @@ def ssd_300(image_size,
     # Build the convolutional predictor layers on top of the base network
     ############################################################################
 
-    # We precidt `n_classes` confidence values for each box,
-    # hence the confidence predictors have depth `n_boxes * n_classes`
+    # We predict `n_classes` confidence values for each box, hence the confidence predictors have depth
+    # `n_boxes * n_classes`
     # Output shape of the confidence layers: `(batch, height, width, n_boxes * n_classes)`
     conv4_3_norm_mbox_conf = Conv2D(n_boxes[0] * n_classes, (3, 3), padding='same', kernel_initializer='he_normal',
                                     kernel_regularizer=l2(l2_reg),
@@ -582,7 +580,10 @@ def ssd_300(image_size,
                                         normalize_coords=normalize_coords,
                                         name='conv9_2_mbox_priorbox')(conv9_2_mbox_loc)
 
+    ############################################################################
     # Reshape
+    ############################################################################
+
     # Reshape the class predictions, yielding 3D tensors of shape `(batch, height * width * n_boxes, n_classes)`
     # We want the classes isolated in the last axis to perform softmax on them
     conv4_3_norm_mbox_conf_reshape = Reshape((-1, n_classes),
@@ -611,9 +612,9 @@ def ssd_300(image_size,
 
     # Concatenate the predictions from the different layers
 
-    # Axis 0 (batch) and axis 2 (n_classes or 4, respectively) are identical for all layer predictions,
+    # Axis 0 (batch_size) and axis 2 (num_classes or 4, respectively) are identical for all layer predictions,
     # so we want to concatenate along axis 1, the number of boxes per layer
-    # Output shape of `mbox_conf`: (batch, n_boxes_total, n_classes)
+    # Output shape of `mbox_conf`: (batch_size, total_num_boxes, num_classes)
     mbox_conf = Concatenate(axis=1, name='mbox_conf')([conv4_3_norm_mbox_conf_reshape,
                                                        fc7_mbox_conf_reshape,
                                                        conv6_2_mbox_conf_reshape,
@@ -621,7 +622,7 @@ def ssd_300(image_size,
                                                        conv8_2_mbox_conf_reshape,
                                                        conv9_2_mbox_conf_reshape])
 
-    # Output shape of `mbox_loc`: (batch, n_boxes_total, 4)
+    # Output shape of `mbox_loc`: (batch_size, total_num_boxes, 4)
     mbox_loc = Concatenate(axis=1, name='mbox_loc')([conv4_3_norm_mbox_loc_reshape,
                                                      fc7_mbox_loc_reshape,
                                                      conv6_2_mbox_loc_reshape,
@@ -629,7 +630,7 @@ def ssd_300(image_size,
                                                      conv8_2_mbox_loc_reshape,
                                                      conv9_2_mbox_loc_reshape])
 
-    # Output shape of `mbox_priorbox`: (batch, n_boxes_total, 8)
+    # Output shape of `mbox_priorbox`: (batch_size, total_num_boxes, 8)
     mbox_priorbox = Concatenate(axis=1, name='mbox_priorbox')([conv4_3_norm_mbox_priorbox_reshape,
                                                                fc7_mbox_priorbox_reshape,
                                                                conv6_2_mbox_priorbox_reshape,
@@ -642,7 +643,7 @@ def ssd_300(image_size,
     mbox_conf_softmax = Activation('softmax', name='mbox_conf_softmax')(mbox_conf)
 
     # Concatenate the class and box predictions and the anchors to one large predictions vector
-    # Output shape of `predictions`: (batch, n_boxes_total, n_classes + 4 + 8)
+    # Output shape of `predictions`: (batch_size, total_num_boxes, num_classes + 4 + 8)
     predictions = Concatenate(axis=2, name='predictions')([mbox_conf_softmax, mbox_loc, mbox_priorbox])
 
     if mode == 'training':

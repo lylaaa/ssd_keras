@@ -343,7 +343,8 @@ class Gamma:
         Arguments:
             gamma (float): A float greater than zero that determines gamma change.
         """
-        if gamma <= 0.0: raise ValueError("It must be `gamma > 0`.")
+        if gamma <= 0.0:
+            raise ValueError("It must be `gamma > 0`.")
         self.gamma = gamma
         self.gamma_inv = 1.0 / gamma
         # Build a lookup table mapping the pixel values [0, 255] to
@@ -351,7 +352,7 @@ class Gamma:
         self.table = np.array([((i / 255.0) ** self.gamma_inv) * 255 for i in np.arange(0, 256)]).astype("uint8")
 
     def __call__(self, image, labels=None):
-        image = cv2.LUT(image, table)
+        image = cv2.LUT(image, self.table)
         return image, labels
 
 
@@ -406,7 +407,7 @@ class RandomHistogramEqualization:
     Randomly performs histogram equalization on HSV images. The randomness only refers
     to whether or not the equalization is performed.
 
-    Importat: Expects HSV input.
+    Important: Expects HSV input.
     """
 
     def __init__(self, prob=0.5):

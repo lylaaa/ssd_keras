@@ -26,11 +26,16 @@ def match_bipartite_greedy(weight_matrix):
 
     The algorithm works as follows:
 
+    num_gt_boxes 次循环:
+        为所有 gt_boxes 找到最大的 iou 的 anchor_box 的 id, 然后获取相应的 iou
+        从这 num_gt_boxes 中个 iou 中找出最大值, 认为相应的 gt_box 和 anchor_box 匹配
+        设置 weights_matrix 相应的行和列为 0
+
     Let the first axis of `weight_matrix` represent ground truth boxes and the second axis anchor boxes.
     The ground truth box that has the greatest similarity with any anchor box will be matched first,
     then out of the remaining ground truth boxes, the ground truth box that has the greatest similarity with any of the
     remaining anchor boxes will be matched second, and so on.
-    先找到最大 overlap 的 gt_box 和 anchor_box
+
     That is, the ground truth boxes will be matched in descending order by maximum similarity with any of the
     respectively remaining anchor boxes.
     The runtime complexity is O(m^2 * n), where `m` is the number of ground truth boxes and `n` is the number of
@@ -51,15 +56,15 @@ def match_bipartite_greedy(weight_matrix):
     """
     # We'll modify this array.
     weight_matrix = np.copy(weight_matrix)
-    num_ground_truth_boxes = weight_matrix.shape[0]
+    num_gt_boxes = weight_matrix.shape[0]
     # Only relevant for fancy-indexing below.
-    all_gt_indices = list(range(num_ground_truth_boxes))
+    all_gt_indices = list(range(num_gt_boxes))
 
     # This 1D array will contain for each ground truth box the index of the matched anchor box.
-    matches = np.zeros(num_ground_truth_boxes, dtype=np.int)
+    matches = np.zeros(num_gt_boxes, dtype=np.int)
 
     # In each iteration of the loop below, exactly one ground truth box will be matched to one anchor box.
-    for _ in range(num_ground_truth_boxes):
+    for _ in range(num_gt_boxes):
         # Find the maximal anchor-ground truth pair in two steps:
         # First, reduce over the anchor boxes and then reduce over the ground truth boxes.
         # Reduce along the anchor box axis.
@@ -69,16 +74,18 @@ def match_bipartite_greedy(weight_matrix):
         overlaps = weight_matrix[all_gt_indices, anchor_indices]
         # Reduce along the ground truth box axis.
         # 然后再在这 num_gt_boxes 个 iou 中找到最大的
-        ground_truth_index = np.argmax(overlaps)
-        anchor_index = anchor_indices[ground_truth_index]
+        # gt_index 表示这个最大 iou 对应的 gt_box 的 index
+        gt_index = np.argmax(overlaps)
+        # anchor_index 表示这个最大 iou 对应的 anchor_box 的 index
+        anchor_index = anchor_indices[gt_index]
         # Set the match.
-        matches[ground_truth_index] = anchor_index
+        matches[gt_index] = anchor_index
 
         # Set the row of the matched ground truth box to all zeros, because it has found the matched anchor_box
         # Set the column of the matched anchor box to all zeros, because they will never be the best matches
         # for any other boxes.
-        # 最后设置该 gt_box 和其他所有的 anchor_box 的 iou 为 0, 设置该 anchor_box 和其他所有的 gt_box 的 iou 为 0.
-        weight_matrix[ground_truth_index] = 0
+        # 最后设置该 gt_box 和其他所有的 anchor_boxes 的 iou 为 0, 设置该 anchor_box 和其他所有的 gt_boxes 的 iou 为 0.
+        weight_matrix[gt_index] = 0
         weight_matrix[:, anchor_index] = 0
 
     return matches
@@ -113,17 +120,19 @@ def match_multi(weight_matrix, threshold):
 
     # Find the best ground truth match for every anchor box.
     # Array of shape (weight_matrix.shape[1],), 也就是 (num_anchor_boxes, )
-    # 每一个元素表示每一个 anchor_box 对应最大 iou 的 gt_box 的 id
-    ground_truth_indices = np.argmax(weight_matrix, axis=0)
+    # 每一个元素表示一个 anchor_box 对应最大 iou 的 gt_box 的 id
+    gt_indices = np.argmax(weight_matrix, axis=0)
     # Array of shape (weight_matrix.shape[1],), 也就是 (num_anchor_boxes, )
-    # 每一个元素表示每一个 anchor_box 和所有 gt_boxes 对应的最大 iou
-    overlaps = weight_matrix[ground_truth_indices, all_anchor_indices]
+    # 每一个元素表示一个 anchor_box 和所有 gt_boxes 对应的最大 iou
+    overlaps = weight_matrix[gt_indices, all_anchor_indices]
 
     # Filter out the matches with a weight below the threshold.
-    # shape 为 (num_anchor_boxes, ), 每一个元素为 True 表示该 anchor_box 是满足条件的, 就是和 gt_boxes 的最大 iou 是大于阈值的
-    # np.nonzero() 返回 tuple, tuple 的每一个值表示 非 zero 的值的在某一个维度上的 indices 和 np.where 比较像
+    # overlaps >= threshold 的 shape 为 (num_anchor_boxes, ), 每一个元素为 True 表示该 anchor_box 是满足条件的
+    # 就是和 gt_boxes 的最大 iou 是大于阈值的
+    # np.nonzero() 返回 tuple, tuple 的每一个元素是一个 np.array, 表示 非 zero 的值的在某一个维度上的 indices 和 np.where 比较像
+    # (num_positive_anchor_boxes, )
     anchor_indices_thresh_met = np.nonzero(overlaps >= threshold)[0]
-    # shape 为 (num_anchor_boxes, ), 每一个元素表示符合条件的 anchor_box 对应的 gt_box 的 id
-    gt_indices_thresh_met = ground_truth_indices[anchor_indices_thresh_met]
+    # shape 为 (num_positive_anchor_boxes, ), 每一个元素表示符合条件的 anchor_box 对应的 gt_box 的 id
+    gt_indices_thresh_met = gt_indices[anchor_indices_thresh_met]
 
     return gt_indices_thresh_met, anchor_indices_thresh_met
